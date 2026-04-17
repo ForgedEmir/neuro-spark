@@ -2,9 +2,7 @@
 
 Distributed Big Data pipeline for decoding motor imagery from EEG signals. 66 subjects, 64 electrodes, PySpark + MLlib. From raw neural signals to classified imagined movements.
 
-<p align="center">
-  <video src="assets/neuro-spark-demo.mp4" width="800" controls></video>
-</p>
+![NeuroSpark Demo](assets/neuro-spark-demo.gif)
 
 ---
 
