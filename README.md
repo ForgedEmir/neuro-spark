@@ -2,6 +2,8 @@
 
 Distributed Big Data pipeline for decoding motor imagery from EEG signals. 66 subjects, 64 electrodes, PySpark + MLlib. From raw neural signals to classified imagined movements.
 
+https://github.com/user-attachments/assets/neuro-spark-demo.mp4
+
 ---
 
 ## The Problem
@@ -163,10 +165,11 @@ neuro-spark/
 │   ├── Dockerfile                    # Spark environment
 │   ├── docker-compose.yml            # Cluster orchestration
 │   └── entrypoint.sh                 # Container entrypoint
-├── assets/                           # Screenshots & visuals
+├── assets/                           # Screenshots, visuals & demo video
 │   ├── signal_eeg.png
 │   ├── confusion_matrix.png
-│   └── alpha_power.png
+│   ├── alpha_power.png
+│   └── neuro-spark-demo.mp4          # 30s Remotion demo
 ├── .gitignore
 ├── LICENSE
 └── README.md
