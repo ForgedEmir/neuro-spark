@@ -1,6 +1,6 @@
 # NeuroSpark: Distributed EEG Motor Imagery Decoding
 
-Distributed Big Data pipeline for decoding motor imagery from EEG signals. 109 subjects, 64 electrodes, PySpark + MLlib. From raw neural signals to classified imagined movements.
+Distributed Big Data pipeline for decoding motor imagery from EEG signals. 66 subjects, 64 electrodes, PySpark + MLlib. From raw neural signals to classified imagined movements.
 
 ---
 
@@ -16,7 +16,7 @@ We distribute the entire pipeline across a Spark cluster, from raw `.edf` ingest
 
 ```
 Raw EDF ──▶ Preprocess ──▶ Feature Extraction ──▶ Classification ──▶ Dashboard
-(109 subj)   (Filter+Epoch)   (FFT Band Power)     (RandomForest)    (Dash/Plotly)
+(66 subj)   (Filter+Epoch)   (FFT Band Power)     (RandomForest)    (Dash/Plotly)
 ```
 
 ---
@@ -26,7 +26,7 @@ Raw EDF ──▶ Preprocess ──▶ Feature Extraction ──▶ Classificati
 | Property | Value |
 |---|---|
 | Source | PhysioNet EEG Motor Movement/Imagery |
-| Subjects | 109 (S001–S109) |
+| Subjects | 66 (S001–S066) |
 | Electrodes | 64 (10-20 system) |
 | Sampling Rate | 160 Hz |
 | Total Rows | ~15 million (Parquet) |
@@ -73,13 +73,27 @@ Three iterations, each documented with results:
 
 **Key discovery:** 61 of 64 channels were noise. Only C3, Cz, C4 (sensorimotor cortex electrodes) carry discriminative signal for motor imagery. Reducing features improved performance.
 
-### D. Per-Class Performance
+---
 
-| Class | Recall | Precision | Interpretation |
-|---|---|---|---|
-| T0 (Rest) | 54.2% | 55.7% | Distinct background signal — well recognized |
-| T1 (Left Hand) | 37.9% | 27.9% | Often confused with T0 |
-| T2 (Right Hand) | 19.9% | 28.4% | Hardest — similar patterns to T1 |
+## Visualizations
+
+### Raw EEG Signal — Channel Cz
+
+![EEG Signal Cz — Subject S001 Run R03](assets/signal_eeg.png)
+
+Raw neural signal from the Cz electrode (vertex of the scalp). Blue = T0 (rest), Red = T2 (imagery). Note the difference in amplitude and oscillation patterns between rest and motor imagery states.
+
+### Alpha Power by Task and Channel
+
+![Alpha Power — C3/Cz/C4 by Task](assets/alpha_power.png)
+
+T0 (rest) consistently shows higher alpha power across all motor cortex channels — the signature of Event-Related Desynchronization (ERD). During motor imagery, alpha power drops because the sensorimotor cortex becomes active.
+
+### Confusion Matrix — RandomForest
+
+![Confusion Matrix — RandomForest](assets/confusion_matrix.png)
+
+The model excels at detecting rest (T0: 3032 correct) but struggles to distinguish left vs right hand imagery (T1/T2). This is expected — left/right motor imagery produces similar patterns on midline electrodes.
 
 ---
 
@@ -120,8 +134,18 @@ Interactive neuro-imaging dashboard built with Dash/Plotly.
 | **Brain Topography** | Spatial activity map across 64 electrodes |
 | **Band Power Analysis** | Frequency decomposition per brain region |
 | **Confusion Matrix** | Classification accuracy per class |
-| **Per-Subject Performance** | Accuracy distribution across 109 subjects |
+| **Per-Subject Performance** | Accuracy distribution across subjects |
 | **Feature Importance** | Which channels/bands drive classification |
+
+---
+
+## Per-Class Performance
+
+| Class | Recall | Precision | Interpretation |
+|---|---|---|---|
+| T0 (Rest) | 54.2% | 55.7% | Distinct background signal — well recognized |
+| T1 (Left Hand) | 37.9% | 27.9% | Often confused with T0 |
+| T2 (Right Hand) | 19.9% | 28.4% | Hardest — similar patterns to T1 |
 
 ---
 
@@ -139,6 +163,10 @@ neuro-spark/
 │   ├── Dockerfile                    # Spark environment
 │   ├── docker-compose.yml            # Cluster orchestration
 │   └── entrypoint.sh                 # Container entrypoint
+├── assets/                           # Screenshots & visuals
+│   ├── signal_eeg.png
+│   ├── confusion_matrix.png
+│   └── alpha_power.png
 ├── .gitignore
 ├── LICENSE
 └── README.md
