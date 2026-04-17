@@ -1,0 +1,25 @@
+# ── Données EEG (trop lourdes pour Git) ──────────────────────────────
+data/
+
+# ── Logs Spark ────────────────────────────────────────────────────────
+spark-logs/
+
+# ── Scripts de test temporaires ───────────────────────────────────────
+**/test_*.py
+
+# ── Jupyter ───────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# ── Python ────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.venv/
+venv/
+
+# ── OS ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
