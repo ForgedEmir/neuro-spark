@@ -5,10 +5,12 @@ services:
     image: spark-image
     entrypoint: ['./entrypoint.sh', 'master']
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8080" ]
-      interval: 5s
-      timeout: 3s
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
       retries: 3
+      start_period: 30s
+    restart: unless-stopped
     volumes:
       - ./scripts:/opt/spark/scripts
       - ./data:/opt/spark/data
@@ -17,10 +19,10 @@ services:
     environment:
       - SPARK_NO_DAEMONIZE=true
     ports:
-      - '8080:8080' # Spark master Web UI
-      - '7077:7077' # For spark-node-to-spark-node queries
-      - '4040:4040' # Spark worker data
-      - '8889:8889' # Optionaly - Jupyter web UI
+      - '8080:8080'
+      - '7077:7077'
+      - '4040:4040'
+      - '${JUPYTER_PORT:-8889}:${JUPYTER_PORT:-8889}'
     deploy:
       resources:
         limits:
@@ -32,7 +34,9 @@ services:
     image: spark-image
     entrypoint: ['./entrypoint.sh', 'history']
     depends_on:
-      - spark-master
+      spark-master:
+        condition: service_healthy
+    restart: unless-stopped
     environment:
       - SPARK_NO_DAEMONIZE=true
     volumes:
@@ -53,11 +57,13 @@ services:
     image: spark-image
     entrypoint: ['./entrypoint.sh', 'worker']
     depends_on:
-      - spark-master
+      spark-master:
+        condition: service_healthy
+    restart: unless-stopped
     environment:
       - SPARK_NO_DAEMONIZE=true
-      - SPARK_WORKER_MEMORY=20g
-      - SPARK_WORKER_CORES=8
+      - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEMORY:-20g}
+      - SPARK_WORKER_CORES=${SPARK_WORKER_CORES:-8}
     volumes:
       - ./scripts:/opt/spark/scripts
       - ./data:/opt/spark/data

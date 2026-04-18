@@ -1,0 +1,13 @@
+.git/
+__pycache__/
+*.pyc
+.env
+.venv/
+data/
+spark-logs/
+warehouse/
+*.parquet
+.ipynb_checkpoints/
+node_modules/
+assets/*.mp4
+assets/*.mp4.webm

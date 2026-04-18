@@ -1,4 +1,5 @@
 import os
+import sys
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -7,21 +8,32 @@ import dash
 from dash import dcc, html, Input, Output
 from scipy.interpolate import griddata
 
-# ── Données ──────────────────────────────────────────────────────────────────
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'dashboard')
+# ── Configuration ─────────────────────────────────────────────────────────────
+DATA_DIR = os.environ.get(
+    "DASHBOARD_DATA",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dashboard")
+)
+PORT = int(os.environ.get("DASHBOARD_PORT", 8050))
 
+# ── Données ──────────────────────────────────────────────────────────────────
 def load():
+    missing = []
+    for f in ['signal_sample.parquet', 'features.parquet', 'predictions.parquet']:
+        p = os.path.join(DATA_DIR, f)
+        if not os.path.exists(p):
+            missing.append(f)
+    if missing:
+        print(f"\nERREUR : fichiers manquants dans {DATA_DIR}/")
+        print(f"  Manquants : {', '.join(missing)}")
+        print("  Lance d'abord le notebook (cellule Export), puis relance ce script.\n")
+        sys.exit(1)
+
     signal   = pd.read_parquet(os.path.join(DATA_DIR, 'signal_sample.parquet'))
     features = pd.read_parquet(os.path.join(DATA_DIR, 'features.parquet'))
     preds    = pd.read_parquet(os.path.join(DATA_DIR, 'predictions.parquet'))
     return signal, features, preds
 
-try:
-    signal_df, features_df, pred_df = load()
-except FileNotFoundError:
-    print("\nERREUR : données manquantes dans data/dashboard/")
-    print("Lance d'abord le notebook (cellule Export), puis relance ce script.\n")
-    raise
+signal_df, features_df, pred_df = load()
 
 # ── Styles ───────────────────────────────────────────────────────────────────
 COLORS   = {'T0': '#636EFA', 'T1': '#EF553B', 'T2': '#00CC96'}
@@ -335,5 +347,5 @@ def update_brain(task, band):
     return fig_brain_topo(task, band)
 
 if __name__ == '__main__':
-    print('Dashboard disponible sur http://localhost:8050')
-    app.run(debug=False, host='0.0.0.0', port=8050)
+    print(f'Dashboard disponible sur http://localhost:{PORT}')
+    app.run(debug=False, host='0.0.0.0', port=PORT)
