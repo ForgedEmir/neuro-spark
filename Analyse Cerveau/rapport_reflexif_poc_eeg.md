@@ -158,19 +158,13 @@ C'est ce qui rend le sujet fascinant au-delà du technique : on ne fait pas que 
 > *"Les pensées positives sont un préalable biologique à une existence heureuse et en santé. Vos croyances engendrent vos pensées, vos pensées engendrent vos paroles, vos paroles engendrent vos gestes, vos gestes engendrent vos habitudes, vos habitudes engendrent vos valeurs et vos valeurs engendrent votre destin."*
 > — Bruce Lipton citant Gandhi, *La Biologie des Croyances*, p.178
 
-### Illustrations du livre
+### Illustration du livre
 
-**Le modèle de Lipton : l'environnement contrôle la biologie, pas l'inverse**
+Le diagramme ci-dessous est le schéma central de Lipton : le flux d'information biologique part de l'environnement, pas de l'ADN. Le signal environnemental active les protéines régulatrices, qui contrôlent l'expression des gènes. Le sens classique (ADN → ARN → protéine) est inversé — l'environnement est premier.
 
-Le diagramme ci-dessous montre le flux d'information biologique selon Lipton : c'est le signal environnemental qui active les protéines régulatrices, qui à leur tour contrôlent l'ADN. Le sens classique (ADN → ARN → protéine) est inversé — l'environnement est premier.
+Dans notre projet, le "signal environnemental" de Lipton, c'est la pensée. Et l'ERD qu'on mesure, c'est la preuve que ce signal modifie l'activité corticale.
 
-![Signal environnemental → protéines régulatrices → ADN (p.82)](assets/lipton_signal_env-082.png)
-
-**L'épigénétique en action : les souris agouti**
-
-Ces deux sœurs sont génétiquement identiques. La seule différence : un supplément de méthyle donné à leur mère. Résultat : pelage différent, poids différent, risque de diabète/cancer différent. Mêmes gènes, expression différente — preuve que l'environnement (et donc les signaux du cerveau) modifie la biologie.
-
-![Sœurs agouti — génétiquement identiques, phénotypes différents (p.86)](assets/lipton_souris_agouti-086.png)
+![Signal environnemental → protéines régulatrices → ADN — Bruce Lipton, p.82](assets/lipton_signal_env-082.png)
 
 ---
 
