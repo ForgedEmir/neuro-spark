@@ -150,19 +150,27 @@ Le phénomène d'**Event-Related Desynchronization (ERD)** — visible dans notr
 > *"La pensée, cette énergie de l'esprit, affecte directement la façon dont le cerveau contrôle la physiologie. L'énergie de la pensée peut activer ou inhiber la production cellulaire de protéines."*
 > — Bruce Lipton, *La Biologie des Croyances*, p.153
 
-![Page 153 — Lipton](assets/lipton_p153.png)
-
 C'est ce qui rend le sujet fascinant au-delà du technique : on ne fait pas que distribuer des données sur un cluster. On analyse ce qui se passe dans la tête de quelqu'un — au sens littéral.
 
 > *"Les croyances contrôlent la biologie ! Nous avons la capacité d'évaluer consciemment nos réactions aux stimuli et de changer nos vieilles réactions n'importe quand. Nous ne sommes donc pas esclaves de nos gènes."*
 > — Bruce Lipton, *La Biologie des Croyances*, p.166
 
-![Page 166 — Les croyances contrôlent la biologie](assets/lipton_p166.png)
-
 > *"Les pensées positives sont un préalable biologique à une existence heureuse et en santé. Vos croyances engendrent vos pensées, vos pensées engendrent vos paroles, vos paroles engendrent vos gestes, vos gestes engendrent vos habitudes, vos habitudes engendrent vos valeurs et vos valeurs engendrent votre destin."*
 > — Bruce Lipton citant Gandhi, *La Biologie des Croyances*, p.178
 
-![Page 178 — Pensées positives + citation Gandhi](assets/lipton_p178.png)
+### Illustrations
+
+**Le pont entre Lipton et notre EEG :**
+
+![De la pensée au signal — le pont entre Lipton et l'EEG](assets/illustration_lipton_eeg.png)
+
+**Le phénomène ERD — quand la pensée modifie le signal :**
+
+![Event-Related Desynchronization — ERD](assets/illustration_erd.png)
+
+**La cellule comme récepteur — modèle de Lipton :**
+
+![La membrane cellulaire perçoit l'environnement](assets/illustration_cellule.png)
 
 ---
 

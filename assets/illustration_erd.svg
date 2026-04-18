@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a1a"/>
+      <stop offset="100%" style="stop-color:#1a1a2e"/>
+    </linearGradient>
+    <linearGradient id="activeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#EF553B"/>
+      <stop offset="100%" style="stop-color:#EF553B;stop-opacity:0.2"/>
+    </linearGradient>
+    <linearGradient id="restGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#636EFA"/>
+      <stop offset="100%" style="stop-color:#636EFA;stop-opacity:0.2"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="800" height="400" fill="url(#bg2)" rx="12"/>
+
+  <text x="400" y="35" text-anchor="middle" fill="#e0e0e0" font-size="16" font-weight="700" letter-spacing="1">EVENT-RELATED DESYNCHRONIZATION (ERD)</text>
+  <text x="400" y="55" text-anchor="middle" fill="#888" font-size="11">Quand la pensée modifie le signal électrique du cerveau — sans aucun mouvement</text>
+
+  <!-- LEFT: REST STATE -->
+  <text x="150" y="90" text-anchor="middle" fill="#636EFA" font-size="12" font-weight="600">REPOS (T0)</text>
+  <text x="150" y="108" text-anchor="middle" fill="#888" font-size="10">Aucune pensée motrice</text>
+
+  <!-- Brain top view - rest -->
+  <ellipse cx="150" cy="200" rx="90" ry="75" fill="#0f0f1a" stroke="#333" stroke-width="1.5"/>
+
+  <!-- High alpha zones (rest = high alpha) -->
+  <circle cx="100" cy="180" r="30" fill="#636EFA" opacity="0.5"/>
+  <circle cx="150" cy="165" r="30" fill="#636EFA" opacity="0.6"/>
+  <circle cx="200" cy="180" r="30" fill="#636EFA" opacity="0.5"/>
+
+  <!-- Electrode markers -->
+  <circle cx="100" cy="180" r="5" fill="#fff" stroke="#636EFA" stroke-width="2"/>
+  <text x="100" y="170" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">C3</text>
+  <circle cx="150" cy="165" r="5" fill="#fff" stroke="#636EFA" stroke-width="2"/>
+  <text x="150" y="155" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">Cz</text>
+  <circle cx="200" cy="180" r="5" fill="#fff" stroke="#636EFA" stroke-width="2"/>
+  <text x="200" y="170" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">C4</text>
+
+  <!-- Nez -->
+  <path d="M135,128 L150,112 L165,128" stroke="#555" stroke-width="1.5" fill="none"/>
+
+  <!-- EEG wave rest -->
+  <text x="150" y="300" text-anchor="middle" fill="#636EFA" font-size="10" font-weight="600">Puissance Alpha</text>
+  <rect x="80" y="310" width="140" height="30" rx="4" fill="#636EFA" opacity="0.3"/>
+  <rect x="80" y="310" width="120" height="30" rx="4" fill="#636EFA" opacity="0.6"/>
+  <text x="150" y="330" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">HAUTE</text>
+
+  <text x="150" y="365" text-anchor="middle" fill="#888" font-size="10">Cortex moteur au repos</text>
+  <text x="150" y="380" text-anchor="middle" fill="#888" font-size="10">= rythme Alpha synchronisé</text>
+
+  <!-- ARROW CENTER -->
+  <line x1="270" y1="200" x2="330" y2="200" stroke="#555" stroke-width="2" marker-end="url(#arrowGray)"/>
+  <defs><marker id="arrowGray" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#555"/></marker></defs>
+  <text x="300" y="190" text-anchor="middle" fill="#EF553B" font-size="10" font-weight="600">IMAGINE</text>
+  <text x="300" y="220" text-anchor="middle" fill="#EF553B" font-size="9">main droite</text>
+
+  <!-- CENTER: The thought bubble -->
+  <rect x="340" y="150" width="120" height="100" rx="50" fill="#1e1e3a" stroke="#EF553B" stroke-width="2"/>
+  <text x="400" y="195" text-anchor="middle" fill="#EF553B" font-size="28">🧠</text>
+  <text x="400" y="225" text-anchor="middle" fill="#e0e0e0" font-size="10" font-weight="600">PENSÉE</text>
+  <text x="400" y="240" text-anchor="middle" fill="#888" font-size="9">(zéro mouvement)</text>
+
+  <!-- ARROW CENTER TO RIGHT -->
+  <line x1="460" y1="200" x2="520" y2="200" stroke="#555" stroke-width="2" marker-end="url(#arrowGray)"/>
+  <text x="490" y="190" text-anchor="middle" fill="#00CC96" font-size="10">SIGNAL</text>
+
+  <!-- RIGHT: MOTOR IMAGERY STATE -->
+  <text x="650" y="90" text-anchor="middle" fill="#EF553B" font-size="12" font-weight="600">IMAGERIE MOTRICE (T2)</text>
+  <text x="650" y="108" text-anchor="middle" fill="#888" font-size="10">Imaginer bouger main droite</text>
+
+  <!-- Brain top view - active -->
+  <ellipse cx="650" cy="200" rx="90" ry="75" fill="#0f0f1a" stroke="#333" stroke-width="1.5"/>
+
+  <!-- C3 active (low alpha = activated) -->
+  <circle cx="600" cy="180" r="30" fill="#EF553B" opacity="0.6"/>
+  <text x="575" y="195" fill="#EF553B" font-size="8">ACTIF</text>
+
+  <!-- Cz normal -->
+  <circle cx="650" cy="165" r="25" fill="#636EFA" opacity="0.3"/>
+
+  <!-- C4 normal -->
+  <circle cx="700" cy="180" r="25" fill="#636EFA" opacity="0.3"/>
+
+  <!-- Electrode markers -->
+  <circle cx="600" cy="180" r="5" fill="#fff" stroke="#EF553B" stroke-width="2"/>
+  <text x="600" y="170" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">C3</text>
+  <circle cx="650" cy="165" r="5" fill="#fff" stroke="#636EFA" stroke-width="2"/>
+  <text x="650" y="155" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">Cz</text>
+  <circle cx="700" cy="180" r="5" fill="#fff" stroke="#636EFA" stroke-width="2"/>
+  <text x="700" y="170" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">C4</text>
+
+  <!-- Nez -->
+  <path d="M635,128 L650,112 L665,128" stroke="#555" stroke-width="1.5" fill="none"/>
+
+  <!-- Laterality label -->
+  <text x="760" y="175" fill="#EF553B" font-size="9">← Hémisphère gauche</text>
+  <text x="760" y="188" fill="#EF553B" font-size="9">contrôle main droite</text>
+
+  <!-- EEG wave - desynchronized -->
+  <text x="650" y="300" text-anchor="middle" fill="#EF553B" font-size="10" font-weight="600">Puissance Alpha</text>
+  <rect x="580" y="310" width="140" height="30" rx="4" fill="#EF553B" opacity="0.3"/>
+  <rect x="580" y="310" width="55" height="30" rx="4" fill="#EF553B" opacity="0.6"/>
+  <text x="650" y="330" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">DIMINUÉE (ERD)</text>
+
+  <text x="650" y="365" text-anchor="middle" fill="#888" font-size="10">C3 désynchronisé</text>
+  <text x="650" y="380" text-anchor="middle" fill="#888" font-size="10">= pensée → signal mesurable</text>
+
+  <!-- Bottom formula -->
+  <rect x="200" y="390" width="400" height="1" fill="#333"/>
+</svg>
