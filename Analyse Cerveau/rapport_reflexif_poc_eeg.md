@@ -158,19 +158,19 @@ C'est ce qui rend le sujet fascinant au-delà du technique : on ne fait pas que 
 > *"Les pensées positives sont un préalable biologique à une existence heureuse et en santé. Vos croyances engendrent vos pensées, vos pensées engendrent vos paroles, vos paroles engendrent vos gestes, vos gestes engendrent vos habitudes, vos habitudes engendrent vos valeurs et vos valeurs engendrent votre destin."*
 > — Bruce Lipton citant Gandhi, *La Biologie des Croyances*, p.178
 
-### Illustrations
+### Illustrations du livre
 
-**Le pont entre Lipton et notre EEG :**
+**Le modèle de Lipton : l'environnement contrôle la biologie, pas l'inverse**
 
-![De la pensée au signal — le pont entre Lipton et l'EEG](assets/illustration_lipton_eeg.png)
+Le diagramme ci-dessous montre le flux d'information biologique selon Lipton : c'est le signal environnemental qui active les protéines régulatrices, qui à leur tour contrôlent l'ADN. Le sens classique (ADN → ARN → protéine) est inversé — l'environnement est premier.
 
-**Le phénomène ERD — quand la pensée modifie le signal :**
+![Signal environnemental → protéines régulatrices → ADN (p.82)](assets/lipton_signal_env-082.png)
 
-![Event-Related Desynchronization — ERD](assets/illustration_erd.png)
+**L'épigénétique en action : les souris agouti**
 
-**La cellule comme récepteur — modèle de Lipton :**
+Ces deux sœurs sont génétiquement identiques. La seule différence : un supplément de méthyle donné à leur mère. Résultat : pelage différent, poids différent, risque de diabète/cancer différent. Mêmes gènes, expression différente — preuve que l'environnement (et donc les signaux du cerveau) modifie la biologie.
 
-![La membrane cellulaire perçoit l'environnement](assets/illustration_cellule.png)
+![Sœurs agouti — génétiquement identiques, phénotypes différents (p.86)](assets/lipton_souris_agouti-086.png)
 
 ---
 
