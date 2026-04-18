@@ -137,7 +137,29 @@ J'ai cru que "Spark natif" voulait dire "sans aucune bibliothèque externe (NumP
 
 ---
 
-## 6. Résultats et analyse critique
+## 6. Pourquoi le cerveau — dimension personnelle
+
+Ce projet n'est pas tombé sur le cerveau par hasard. Le choix du sujet EEG venait d'un intérêt personnel pour les neurosciences, concrétisé par la lecture de *La Biologie des Croyances* de Bruce Lipton. Lipton est biologiste cellulaire — son livre part d'un constat simple : pendant des décennies, la science a cru que les gènes contrôlaient la biologie. En réalité, les cellules répondent d'abord aux signaux de leur environnement. Y compris les signaux émis par le cerveau.
+
+Ce qui m'a frappé en lisant Lipton, c'est l'idée que **le cerveau ne distingue pas toujours une expérience réelle d'une expérience imaginée**. Penser à une situation stressante déclenche les mêmes réponses hormonales que la vivre. Visualiser un mouvement active les mêmes aires motrices que l'exécuter.
+
+C'est exactement ce que notre projet mesure.
+
+Le phénomène d'**Event-Related Desynchronization (ERD)** — visible dans notre dashboard sur le graphique de puissance Alpha — montre que quand un sujet *imagine* bouger sa main droite, la puissance Alpha diminue sur C3 (cortex moteur gauche). Il n'y a aucun mouvement physique. Le muscle ne bouge pas. Mais le signal EEG change quand même. La pensée seule suffit à modifier l'activité électrique corticale.
+
+> *"Your cells are eavesdropping on your thoughts."* — Bruce Lipton
+
+Lipton parle de biologie cellulaire, pas d'EEG. Mais le mécanisme est le même : le cerveau génère des signaux électriques qui influencent le corps, et ces signaux sont mesurables. Notre pipeline Spark, en traitant 15 millions de lignes de données EEG, capte littéralement l'empreinte électrique de la pensée humaine.
+
+C'est ce qui rend le sujet fascinant au-delà du technique : on ne fait pas que distribuer des données sur un cluster. On analyse ce qui se passe dans la tête de quelqu'un — au sens littéral.
+
+> *[Insérer ici photo de la page du livre — passage sur le pouvoir des pensées sur les cellules]*
+
+> *[Insérer ici photo de la page du livre — passage sur le cerveau et l'environnement]*
+
+---
+
+## 7. Résultats et analyse critique
 
 | Version | Features | Pondération T0 | Accuracy | Remarque |
 |---|---|---|---|---|
@@ -165,7 +187,7 @@ Des recherches publiées sur ce dataset atteignent 70–85% d'accuracy avec des 
 
 ---
 
-## 7. Perspectives et améliorations possibles
+## 8. Perspectives et améliorations possibles
 
 **Normalisation par sujet (StandardScaler)** — Les signaux EEG varient fortement d'une personne à l'autre (amplitude, bruit). Normaliser les features par sujet avant d'entraîner améliorerait la généralisation du modèle.
 
@@ -177,7 +199,7 @@ Des recherches publiées sur ce dataset atteignent 70–85% d'accuracy avec des 
 
 ---
 
-## 8. Conclusion
+## 9. Conclusion
 
 Ce PoC m'a permis de construire un pipeline Big Data complet sur des données réelles et volumineuses. Au-delà du code, j'ai surtout compris les raisons derrière chaque choix technique : pourquoi Parquet plutôt que CSV, pourquoi le pipeline MLlib plutôt qu'un script séquentiel, pourquoi la matrice de confusion plutôt que l'accuracy seule.
 
