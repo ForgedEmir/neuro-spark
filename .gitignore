@@ -120,3 +120,4 @@ Analyse Cerveau/data/dashboard/
 
 # Node
 node_modules/
+*.pdf

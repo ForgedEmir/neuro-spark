@@ -147,15 +147,22 @@ C'est exactement ce que notre projet mesure.
 
 Le phénomène d'**Event-Related Desynchronization (ERD)** — visible dans notre dashboard sur le graphique de puissance Alpha — montre que quand un sujet *imagine* bouger sa main droite, la puissance Alpha diminue sur C3 (cortex moteur gauche). Il n'y a aucun mouvement physique. Le muscle ne bouge pas. Mais le signal EEG change quand même. La pensée seule suffit à modifier l'activité électrique corticale.
 
-> *"Your cells are eavesdropping on your thoughts."* — Bruce Lipton
+> *"La pensée, cette énergie de l'esprit, affecte directement la façon dont le cerveau contrôle la physiologie. L'énergie de la pensée peut activer ou inhiber la production cellulaire de protéines."*
+> — Bruce Lipton, *La Biologie des Croyances*, p.153
 
-Lipton parle de biologie cellulaire, pas d'EEG. Mais le mécanisme est le même : le cerveau génère des signaux électriques qui influencent le corps, et ces signaux sont mesurables. Notre pipeline Spark, en traitant 15 millions de lignes de données EEG, capte littéralement l'empreinte électrique de la pensée humaine.
+![Page 153 — Lipton](assets/lipton_p153.png)
 
 C'est ce qui rend le sujet fascinant au-delà du technique : on ne fait pas que distribuer des données sur un cluster. On analyse ce qui se passe dans la tête de quelqu'un — au sens littéral.
 
-> *[Insérer ici photo de la page du livre — passage sur le pouvoir des pensées sur les cellules]*
+> *"Les croyances contrôlent la biologie ! Nous avons la capacité d'évaluer consciemment nos réactions aux stimuli et de changer nos vieilles réactions n'importe quand. Nous ne sommes donc pas esclaves de nos gènes."*
+> — Bruce Lipton, *La Biologie des Croyances*, p.166
 
-> *[Insérer ici photo de la page du livre — passage sur le cerveau et l'environnement]*
+![Page 166 — Les croyances contrôlent la biologie](assets/lipton_p166.png)
+
+> *"Les pensées positives sont un préalable biologique à une existence heureuse et en santé. Vos croyances engendrent vos pensées, vos pensées engendrent vos paroles, vos paroles engendrent vos gestes, vos gestes engendrent vos habitudes, vos habitudes engendrent vos valeurs et vos valeurs engendrent votre destin."*
+> — Bruce Lipton citant Gandhi, *La Biologie des Croyances*, p.178
+
+![Page 178 — Pensées positives + citation Gandhi](assets/lipton_p178.png)
 
 ---
 
