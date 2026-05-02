@@ -1,13 +1,23 @@
-# ── Parameters ──────────────────────────────────────────────────────────────
-# Hyperparamètres et configuration du pipeline — version PoC.
-# Inspiré de Kedro — sans installer Kedro.
+# ── Parameters — Pipeline Configuration ─────────────────────────────────────
+# Hyperparamètres exacts utilisés dans poc_eeg.ipynb v2 (CrossValidator)
 
 # ---- Spark ----
 spark:
-  app_name: "EEG-PoC-v2"
+  app_name: "EEG-Motor-Imagery"
   master: "spark://spark-master:7077"
   executor_memory: "4g"
   driver_memory: "2g"
+
+# ---- EEG Signal ----
+eeg:
+  sampling_rate: 160        # Hz
+  epoch_seconds: 2           # Fenêtre d'analyse
+  motor_channels: ["C3..", "Cz..", "C4.."]
+  bands:
+    theta:  [4, 8]           # Préparation motrice
+    alpha:  [8, 13]          # Désynchronisation (ERD)
+    beta:   [13, 30]         # Rebond post-mouvement (ERS)
+    gamma:  [30, 80]         # Traitement cognitif
 
 # ---- Ingestion ----
 ingestion:
@@ -15,38 +25,31 @@ ingestion:
   format: "parquet"
   compression: "snappy"
 
-# ---- Feature Engineering ----
+# ---- Features ----
 features:
-  epoch_seconds: 2              # Durée d'une epoch (secondes)
-  sampling_rate: 160            # Hz
-  motor_channels: ["C3..", "Cz..", "C4.."]  # Canaux du cortex moteur
-  bands:
-    theta:  [4, 8]              # Préparation motrice
-    alpha:  [8, 13]             # Désynchronisation (ERD)
-    beta:   [13, 30]            # Rebond post-mouvement (ERS)
-    gamma:  [30, 80]            # Traitement cognitif
-  compute_diff: true            # Différence C3-C4 pour latéralisation
-  normalize_per_subject: true   # Normalisation intra-sujet
+  compute_lateralization: true   # Différence C3-C4 par bande
+  normalize_per_subject: true    # Z-score intra-sujet
+  t0_weight: 0.5                 # Pondération anti-déséquilibre
 
-# ---- ML ----
+# ---- RandomForest + CrossValidator ----
 ml:
   algorithm: "random_forest"
-  num_trees: 100
-  max_depth: 10
   seed: 42
-  class_weights:                # Pondération pour compenser le déséquilibre
-    T0: 0.5                     # T0 = 50% des données → poids réduit
+  num_trees_grid: [50, 100]      # CrossValidator: 2 valeurs
+  max_depth_grid: [5, 10]        # CrossValidator: 2 valeurs
+  cv_folds: 3                    # 4 combos × 3 folds = 12 entraînements
+  class_weights:
+    T0: 0.5
     T1: 1.0
     T2: 1.0
 
 # ---- Train/Test Split ----
 split:
-  strategy: "subject_based"     # Pas de data leakage entre sujets
-  train_subjects: ["S001", "S052"]  # Plage: S001 à S052
-  test_subjects:  ["S053", "S066"]  # Plage: S053 à S066
+  strategy: "subject_based"      # Pas de data leakage entre sujets
+  train_ratio: 0.78              # ~52/66 sujets
 
 # ---- MLflow ----
 mlflow:
-  experiment_name: "neuro-spark-eeg"
+  experiment_name: "neuro-spark-eeg-v2"
   tracking_uri: "file:///opt/spark/mlruns"
   autolog: true

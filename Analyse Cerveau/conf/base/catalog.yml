@@ -1,27 +1,26 @@
 # ── Data Catalog ────────────────────────────────────────────────────────────
-# Chemins centralisés pour toutes les sources de données du pipeline.
-# Inspiré de Kedro — sans installer Kedro.
-#
-# Format : clé descriptive → chemin absolu dans le conteneur Docker
+# Chemins centralisés — inspiré de Kedro sans l'installer.
+# Tous les chemins sont relatifs au conteneur Docker (/opt/spark/).
 
 # ---- Phase 1 : Ingestion ----
-raw_eeg:           /opt/spark/data/eeg              # Fichiers EDF bruts (PhysioNet)
-raw_records:       /opt/spark/data/eeg/RECORDS       # Liste des enregistrements
+raw_eeg:           /opt/spark/data/eeg
+raw_records:       /opt/spark/data/eeg/RECORDS
 
-# ---- Phase 2 : Conversion ----
-parquet:           /opt/spark/data/parquet           # EDF converti en Parquet (783 fichiers)
+# ---- Phase 2 : Conversion (EDF → Parquet) ----
+parquet:           /opt/spark/data/parquet
 
-# ---- Phase 3 : Features ----
-features:          /opt/spark/data/features          # Features extraites (FFT band power)
+# ---- Phase 3 : Feature Engineering ----
+features:          /opt/spark/data/features
 
-# ---- Phase 4 : Modèles ----
-models:            /opt/spark/data/models            # Modèles MLlib sauvegardés
-predictions:       /opt/spark/data/predictions       # Prédictions sur le jeu de test
+# ---- Phase 4 : Entraînement ----
+models:            /opt/spark/data/models
+predictions:       /opt/spark/data/predictions
+metrics:           /opt/spark/data/metrics
 
 # ---- Phase 5 : Dashboard ----
-dashboard_data:    /opt/spark/data/dashboard         # Données agrégées pour Dash
-dashboard_assets:  ./assets                          # CSS, images
+dashboard:         /opt/spark/data/dashboard
+dashboard_assets:  ./assets
 
-# ---- Monitoring ----
-spark_events:      /opt/spark/spark-events           # Logs des jobs Spark (History Server)
-mlflow_tracking:   /opt/spark/mlruns                 # Tracking MLflow
+# ---- Monitoring & Tracking ----
+spark_events:      /opt/spark/spark-events
+mlflow_runs:       /opt/spark/mlruns
