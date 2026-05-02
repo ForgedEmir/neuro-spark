@@ -49,7 +49,6 @@ def main():
 
     # Évaluation
     result = evaluate_model(cv_model, test_df)
-    predictions = result['predictions']
     metrics = result['metrics']
 
     for name, value in metrics.items():

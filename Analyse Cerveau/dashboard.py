@@ -274,7 +274,6 @@ def fig_recall():
         correct = ((df['task_label'] == cls) & (df['pred_label'] == cls)).sum()
         tp = correct
         fp = ((df['task_label'] != cls) & (df['pred_label'] == cls)).sum()
-        fn = total - correct
         recall = correct / total if total > 0 else 0
         prec   = tp / (tp + fp) if (tp + fp) > 0 else 0
         f1     = 2 * prec * recall / (prec + recall) if (prec + recall) > 0 else 0

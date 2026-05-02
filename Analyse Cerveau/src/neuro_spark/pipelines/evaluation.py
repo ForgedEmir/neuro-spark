@@ -7,7 +7,7 @@ import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from neuro_spark.core import create_spark_session, extract_feature_cols, split_by_subject, evaluate_model
+from neuro_spark.core import create_spark_session, split_by_subject, evaluate_model
 from pyspark.ml.tuning import CrossValidatorModel
 
 FEATURES_DIR = os.environ.get('FEATURES_DIR', '/opt/spark/data/features/')

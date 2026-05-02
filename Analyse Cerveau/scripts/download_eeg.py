@@ -1,4 +1,5 @@
-import requests, os
+import requests
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 BASE = "https://physionet.org/files/eegmmidb/1.0.0/"
@@ -6,7 +7,7 @@ OUT  = os.path.join(os.path.dirname(__file__), "..", "data", "eeg") + "/"
 WORKERS = 10  # parallel downloads
 
 r = requests.get(BASE + "RECORDS", timeout=30)
-records = [l.strip() for l in r.text.splitlines() if l.strip()]
+records = [line.strip() for line in r.text.splitlines() if line.strip()]
 
 # Filter only records not yet downloaded
 todo = []
