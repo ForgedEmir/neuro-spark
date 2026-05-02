@@ -1,0 +1,27 @@
+# ── Data Catalog ────────────────────────────────────────────────────────────
+# Chemins centralisés pour toutes les sources de données du pipeline.
+# Inspiré de Kedro — sans installer Kedro.
+#
+# Format : clé descriptive → chemin absolu dans le conteneur Docker
+
+# ---- Phase 1 : Ingestion ----
+raw_eeg:           /opt/spark/data/eeg              # Fichiers EDF bruts (PhysioNet)
+raw_records:       /opt/spark/data/eeg/RECORDS       # Liste des enregistrements
+
+# ---- Phase 2 : Conversion ----
+parquet:           /opt/spark/data/parquet           # EDF converti en Parquet (783 fichiers)
+
+# ---- Phase 3 : Features ----
+features:          /opt/spark/data/features          # Features extraites (FFT band power)
+
+# ---- Phase 4 : Modèles ----
+models:            /opt/spark/data/models            # Modèles MLlib sauvegardés
+predictions:       /opt/spark/data/predictions       # Prédictions sur le jeu de test
+
+# ---- Phase 5 : Dashboard ----
+dashboard_data:    /opt/spark/data/dashboard         # Données agrégées pour Dash
+dashboard_assets:  ./assets                          # CSS, images
+
+# ---- Monitoring ----
+spark_events:      /opt/spark/spark-events           # Logs des jobs Spark (History Server)
+mlflow_tracking:   /opt/spark/mlruns                 # Tracking MLflow

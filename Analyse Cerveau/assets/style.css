@@ -1,0 +1,144 @@
+/* ── NeuroSpark Dashboard ─────────────────────────────────────────────────── */
+/* Chargé automatiquement par Dash depuis le dossier assets/                  */
+
+/* ---- Reset & Base ---- */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    background-color: #0f0f1a;
+    color: #e0e0e0;
+}
+
+/* ---- Layout ---- */
+.dashboard-container {
+    background-color: #0f0f1a;
+    min-height: 100vh;
+}
+
+.header {
+    padding: 24px 28px 16px;
+    border-bottom: 1px solid #2a2a3e;
+}
+
+.header h2 {
+    color: #e0e0e0;
+    margin: 0;
+    font-weight: 700;
+}
+
+.header-subtitle {
+    color: #888888;
+    margin: 4px 0 0 0;
+    font-size: 13px;
+}
+
+/* ---- KPI Row ---- */
+.kpi-row {
+    display: flex;
+    gap: 12px;
+    padding: 16px 28px;
+}
+
+.kpi-card {
+    background-color: #1a1a2e;
+    border-radius: 10px;
+    padding: 16px 20px;
+    flex: 1;
+}
+
+.kpi-value {
+    color: #e0e0e0;
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.kpi-label {
+    color: #888888;
+    font-size: 12px;
+    margin: 4px 0 0 0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* ---- Card Grid ---- */
+.card-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.card {
+    background-color: #1a1a2e;
+    border-radius: 10px;
+    padding: 16px;
+    flex: 1;
+    min-width: 420px;
+}
+
+.card-title {
+    color: #888888;
+    font-size: 12px;
+    margin: 0 0 8px 0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.card-section {
+    padding: 12px 28px;
+}
+
+/* ---- Topomap Section ---- */
+.topomap-section {
+    padding: 12px 28px 28px;
+}
+
+.topomap-card {
+    background-color: #1a1a2e;
+    border-radius: 10px;
+    padding: 16px;
+}
+
+.topomap-title {
+    color: #888888;
+    font-size: 12px;
+    margin: 0 0 12px 0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.topomap-controls {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.topomap-control {
+    width: 210px;
+}
+
+.topomap-control label {
+    color: #888888;
+    font-size: 12px;
+    margin-bottom: 4px;
+    display: block;
+}
+
+/* ---- Dropdown Overrides ---- */
+.dash-dropdown {
+    background-color: #2a2a3e !important;
+    color: #e0e0e0 !important;
+    border: 1px solid #3a3a5e !important;
+    border-radius: 6px !important;
+    font-size: 13px !important;
+}
+
+/* ---- Plotly Overrides ---- */
+.js-plotly-plot .plotly .main-svg {
+    border-radius: 6px;
+}

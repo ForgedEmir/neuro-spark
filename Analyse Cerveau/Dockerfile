@@ -59,7 +59,7 @@ spark.history.fs.logDirectory          /opt/spark/spark-events" > "$SPARK_HOME/c
 FROM spark-base AS pyspark
 
 # Install python deps
-RUN pip3 install pyarrow==16.1.0 pyspark==3.5.1 delta-spark==3.2.0 mne==1.8.0 plotly==5.22.0 scipy==1.14.1 pandas
+RUN pip3 install pyarrow==16.1.0 pyspark==3.5.1 delta-spark==3.2.0 mne==1.8.0 plotly==5.22.0 scipy==1.14.1 pandas mlflow==2.20.0
 
 
 FROM pyspark AS pyspark-runner

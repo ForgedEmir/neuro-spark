@@ -1,4 +1,5 @@
 import os
+import sys
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -7,44 +8,43 @@ import dash
 from dash import dcc, html, Input, Output
 from scipy.interpolate import griddata
 
-# ── Données ──────────────────────────────────────────────────────────────────
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'dashboard')
+# ── Configuration ─────────────────────────────────────────────────────────────
+DATA_DIR = os.environ.get(
+    "DASHBOARD_DATA",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dashboard")
+)
+PORT = int(os.environ.get("DASHBOARD_PORT", 8050))
 
+# ── Données ──────────────────────────────────────────────────────────────────
 def load():
+    missing = []
+    for f in ['signal_sample.parquet', 'features.parquet', 'predictions.parquet']:
+        p = os.path.join(DATA_DIR, f)
+        if not os.path.exists(p):
+            missing.append(f)
+    if missing:
+        print(f"\nERREUR : fichiers manquants dans {DATA_DIR}/")
+        print(f"  Manquants : {', '.join(missing)}")
+        print("  Lance d'abord le notebook (cellule Export), puis relance ce script.\n")
+        sys.exit(1)
+
     signal   = pd.read_parquet(os.path.join(DATA_DIR, 'signal_sample.parquet'))
     features = pd.read_parquet(os.path.join(DATA_DIR, 'features.parquet'))
     preds    = pd.read_parquet(os.path.join(DATA_DIR, 'predictions.parquet'))
     return signal, features, preds
 
-try:
-    signal_df, features_df, pred_df = load()
-except FileNotFoundError:
-    print("\nERREUR : données manquantes dans data/dashboard/")
-    print("Lance d'abord le notebook (cellule Export), puis relance ce script.\n")
-    raise
+signal_df, features_df, pred_df = load()
 
-# ── Styles ───────────────────────────────────────────────────────────────────
-COLORS   = {'T0': '#636EFA', 'T1': '#EF553B', 'T2': '#00CC96'}
-BG       = '#0f0f1a'
-CARD_BG  = '#1a1a2e'
-TEXT     = '#e0e0e0'
-MUTED    = '#888888'
+# ── Constantes graphiques (Plotly) ───────────────────────────────────────────
+COLORS = {'T0': '#636EFA', 'T1': '#EF553B', 'T2': '#00CC96'}
+TEXT_COLOR = '#e0e0e0'
+CARD_BG = '#1a1a2e'
+
 GL = dict(
     paper_bgcolor=CARD_BG, plot_bgcolor=CARD_BG,
-    font=dict(color=TEXT, family='Inter, sans-serif'),
+    font=dict(color=TEXT_COLOR, family='Inter, sans-serif'),
     margin=dict(l=40, r=20, t=40, b=40)
 )
-
-def card(title, graph):
-    return html.Div([
-        html.P(title, style={'color': MUTED, 'fontSize': '12px',
-                             'margin': '0 0 8px 0', 'textTransform': 'uppercase',
-                             'letterSpacing': '1px'}),
-        graph
-    ], style={
-        'backgroundColor': CARD_BG, 'borderRadius': '10px',
-        'padding': '16px', 'flex': '1', 'minWidth': '420px'
-    })
 
 # ── Graphiques ────────────────────────────────────────────────────────────────
 def fig_signal():
@@ -120,13 +120,13 @@ def fig_brain_topo(task='T0', band='alpha'):
     task_data = features_df[features_df['task_label'] == task][cols].mean()
     channels  = ['C3', 'Cz', 'C4']
 
-    # Positions 10-20 (système de référence EEG standard)
+    # Positions 10-20
     elec_pos = {'C3': (-0.50, 0.0), 'Cz': (0.0, 0.12), 'C4': (0.50, 0.0)}
     elec_x   = np.array([elec_pos[c][0] for c in channels])
     elec_y   = np.array([elec_pos[c][1] for c in channels])
     powers   = np.array([task_data[f'{c}_{band}'] for c in channels])
 
-    # Points fantômes sur le pourtour pour que l'interpolation ne diverge pas
+    # Points fantômes sur le pourtour
     n_bound  = 16
     angles   = np.linspace(0, 2 * np.pi, n_bound, endpoint=False)
     bx = 0.95 * np.cos(angles)
@@ -142,26 +142,20 @@ def fig_brain_topo(task='T0', band='alpha'):
     gx  = np.linspace(-1.05, 1.05, res)
     gy  = np.linspace(-1.05, 1.05, res)
     GX, GY = np.meshgrid(gx, gy)
-
     zi = griddata((all_x, all_y), all_v, (GX, GY), method='cubic')
 
-    # Masque circulaire (hors tête = NaN → transparent)
+    # Masque circulaire
     zi[GX ** 2 + GY ** 2 > 0.97 ** 2] = np.nan
 
-    # ── Figure ──
     fig = go.Figure()
 
     # Heatmap interpolée
     fig.add_trace(go.Heatmap(
-        z=zi,
-        x=gx,
-        y=gy,
-        colorscale='RdBu_r',
-        zsmooth='best',
-        showscale=True,
+        z=zi, x=gx, y=gy,
+        colorscale='RdBu_r', zsmooth='best', showscale=True,
         colorbar=dict(
-            title=dict(text=f'{band.capitalize()} (V²)', font=dict(color=TEXT, size=11)),
-            tickfont=dict(color=TEXT, size=10),
+            title=dict(text=f'{band.capitalize()} (V²)', font=dict(color=TEXT_COLOR, size=11)),
+            tickfont=dict(color=TEXT_COLOR, size=10),
             thickness=14, len=0.75,
         ),
         hoverinfo='skip',
@@ -210,10 +204,10 @@ def fig_brain_topo(task='T0', band='alpha'):
     # Labels latéralisation
     fig.add_annotation(x=-1.3, y=-1.1,
                        text='◀ Hémisphère gauche<br><span style="font-size:10px;color:#EF553B">contrôle main droite</span>',
-                       showarrow=False, font=dict(color=TEXT, size=11), align='center')
+                       showarrow=False, font=dict(color=TEXT_COLOR, size=11), align='center')
     fig.add_annotation(x= 1.3, y=-1.1,
                        text='Hémisphère droit ▶<br><span style="font-size:10px;color:#00CC96">contrôle main gauche</span>',
-                       showarrow=False, font=dict(color=TEXT, size=11), align='center')
+                       showarrow=False, font=dict(color=TEXT_COLOR, size=11), align='center')
 
     fig.update_layout(
         **GL,
@@ -226,7 +220,7 @@ def fig_brain_topo(task='T0', band='alpha'):
     )
     return fig
 
-# ── KPI cards ─────────────────────────────────────────────────────────────────
+# ── KPIs ───────────────────────────────────────────────────────────────────────
 label_map = {0.0: 'T0', 1.0: 'T1', 2.0: 'T2'}
 _df = pred_df.copy()
 _df['pred_label'] = _df['prediction'].map(label_map)
@@ -234,96 +228,97 @@ accuracy = (_df['task_label'] == _df['pred_label']).mean()
 n_epochs = len(features_df)
 n_sujets = features_df['subject_id'].nunique() if 'subject_id' in features_df.columns else '—'
 
-def kpi(label, value):
-    return html.Div([
-        html.P(value, style={'color': TEXT, 'fontSize': '26px',
-                              'fontWeight': '700', 'margin': '0'}),
-        html.P(label, style={'color': MUTED, 'fontSize': '12px',
-                              'margin': '4px 0 0 0', 'textTransform': 'uppercase',
-                              'letterSpacing': '1px'})
-    ], style={'backgroundColor': CARD_BG, 'borderRadius': '10px',
-              'padding': '16px 20px', 'flex': '1'})
-
 # ── Layout ────────────────────────────────────────────────────────────────────
 app = dash.Dash(__name__, title='EEG Dashboard — PoC HELMo')
-
 GRAPH_CFG = {'displayModeBar': False}
 
-DROPDOWN_STYLE = {
-    'backgroundColor': '#2a2a3e', 'color': TEXT,
-    'border': '1px solid #3a3a5e', 'borderRadius': '6px',
-    'fontSize': '13px',
-}
-
-app.layout = html.Div([
+app.layout = html.Div(className='dashboard-container', children=[
 
     # Header
-    html.Div([
-        html.H2('PoC EEG Motor Imagery', style={'color': TEXT, 'margin': '0',
-                                                  'fontWeight': '700'}),
+    html.Div(className='header', children=[
+        html.H2('PoC EEG Motor Imagery'),
         html.P('UE28 Big Data — HELMo 2025-2026  ·  RandomForest sur cortex moteur C3 / Cz / C4',
-               style={'color': MUTED, 'margin': '4px 0 0 0', 'fontSize': '13px'}),
-    ], style={'padding': '24px 28px 16px', 'borderBottom': '1px solid #2a2a3e'}),
+               className='header-subtitle'),
+    ]),
 
     # KPIs
-    html.Div([
-        kpi('Accuracy', f'{accuracy:.1%}'),
-        kpi('Epochs analysées', f'{n_epochs:,}'),
-        kpi('Sujets de test', '14'),
-        kpi('Features', '12  (9 bandes + 3 diff C3-C4)'),
-    ], style={'display': 'flex', 'gap': '12px', 'padding': '16px 28px'}),
+    html.Div(className='kpi-row', children=[
+        html.Div(className='kpi-card', children=[
+            html.P(f'{accuracy:.1%}', className='kpi-value'),
+            html.P('Accuracy', className='kpi-label'),
+        ]),
+        html.Div(className='kpi-card', children=[
+            html.P(f'{n_epochs:,}', className='kpi-value'),
+            html.P('Epochs analysées', className='kpi-label'),
+        ]),
+        html.Div(className='kpi-card', children=[
+            html.P('14', className='kpi-value'),
+            html.P('Sujets de test', className='kpi-label'),
+        ]),
+        html.Div(className='kpi-card', children=[
+            html.P('12  (9 bandes + 3 diff C3-C4)', className='kpi-value'),
+            html.P('Features', className='kpi-label'),
+        ]),
+    ]),
 
     # Grille 2×2
-    html.Div([
-        html.Div([
-            card('Signal EEG brut', dcc.Graph(figure=fig_signal(), config=GRAPH_CFG)),
-            card('Matrice de confusion', dcc.Graph(figure=fig_confusion(), config=GRAPH_CFG)),
-        ], style={'display': 'flex', 'gap': '12px', 'marginBottom': '12px'}),
-        html.Div([
-            card('Puissance Alpha par canal', dcc.Graph(figure=fig_alpha(), config=GRAPH_CFG)),
-            card('Recall par classe', dcc.Graph(figure=fig_recall(), config=GRAPH_CFG)),
-        ], style={'display': 'flex', 'gap': '12px'}),
-    ], style={'padding': '12px 28px'}),
+    html.Div(className='card-section', children=[
+        html.Div(className='card-row', children=[
+            html.Div(className='card', children=[
+                html.P('Signal EEG brut', className='card-title'),
+                dcc.Graph(figure=fig_signal(), config=GRAPH_CFG),
+            ]),
+            html.Div(className='card', children=[
+                html.P('Matrice de confusion', className='card-title'),
+                dcc.Graph(figure=fig_confusion(), config=GRAPH_CFG),
+            ]),
+        ]),
+        html.Div(className='card-row', children=[
+            html.Div(className='card', children=[
+                html.P('Puissance Alpha par canal', className='card-title'),
+                dcc.Graph(figure=fig_alpha(), config=GRAPH_CFG),
+            ]),
+            html.Div(className='card', children=[
+                html.P('Recall par classe', className='card-title'),
+                dcc.Graph(figure=fig_recall(), config=GRAPH_CFG),
+            ]),
+        ]),
+    ]),
 
     # Topomap interactive
-    html.Div([
-        html.Div([
-            html.P('TOPOMAP EEG — ACTIVITÉ DU CORTEX MOTEUR', style={
-                'color': MUTED, 'fontSize': '12px', 'margin': '0 0 12px 0',
-                'textTransform': 'uppercase', 'letterSpacing': '1px',
-            }),
-            html.Div([
-                html.Div([
-                    html.Label('Tâche', style={'color': MUTED, 'fontSize': '12px',
-                                               'marginBottom': '4px', 'display': 'block'}),
+    html.Div(className='topomap-section', children=[
+        html.Div(className='topomap-card', children=[
+            html.P('TOPOMAP EEG — ACTIVITÉ DU CORTEX MOTEUR', className='topomap-title'),
+            html.Div(className='topomap-controls', children=[
+                html.Div(className='topomap-control', children=[
+                    html.Label('Tâche'),
                     dcc.Dropdown(
                         id='brain-task',
-                        options=[{'label': 'T0 — Repos',         'value': 'T0'},
-                                 {'label': 'T1 — Main gauche',   'value': 'T1'},
-                                 {'label': 'T2 — Main droite',   'value': 'T2'}],
-                        value='T0', clearable=False, style=DROPDOWN_STYLE,
+                        options=[
+                            {'label': 'T0 — Repos',         'value': 'T0'},
+                            {'label': 'T1 — Main gauche',   'value': 'T1'},
+                            {'label': 'T2 — Main droite',   'value': 'T2'},
+                        ],
+                        value='T0', clearable=False,
                     ),
-                ], style={'width': '210px'}),
-                html.Div([
-                    html.Label('Bande fréquentielle', style={'color': MUTED, 'fontSize': '12px',
-                                               'marginBottom': '4px', 'display': 'block'}),
+                ]),
+                html.Div(className='topomap-control', children=[
+                    html.Label('Bande fréquentielle'),
                     dcc.Dropdown(
                         id='brain-band',
-                        options=[{'label': 'Alpha  (8–13 Hz)',  'value': 'alpha'},
-                                 {'label': 'Beta   (13–30 Hz)', 'value': 'beta'},
-                                 {'label': 'Gamma  (30–80 Hz)', 'value': 'gamma'}],
-                        value='alpha', clearable=False, style=DROPDOWN_STYLE,
+                        options=[
+                            {'label': 'Alpha  (8–13 Hz)',  'value': 'alpha'},
+                            {'label': 'Beta   (13–30 Hz)', 'value': 'beta'},
+                            {'label': 'Gamma  (30–80 Hz)', 'value': 'gamma'},
+                        ],
+                        value='alpha', clearable=False,
                     ),
-                ], style={'width': '210px'}),
-            ], style={'display': 'flex', 'gap': '16px', 'marginBottom': '12px'}),
+                ]),
+            ]),
             dcc.Graph(id='brain-graph', config=GRAPH_CFG),
-        ], style={
-            'backgroundColor': CARD_BG, 'borderRadius': '10px', 'padding': '16px',
-        }),
-    ], style={'padding': '12px 28px 28px'}),
-
-], style={'backgroundColor': BG, 'minHeight': '100vh',
-          'fontFamily': 'Inter, Segoe UI, sans-serif'})
+        ]),
+    ]),
+])
 
 # ── Callback topomap ──────────────────────────────────────────────────────────
 @app.callback(
@@ -335,5 +330,5 @@ def update_brain(task, band):
     return fig_brain_topo(task, band)
 
 if __name__ == '__main__':
-    print('Dashboard disponible sur http://localhost:8050')
-    app.run(debug=False, host='0.0.0.0', port=8050)
+    print(f'Dashboard disponible sur http://localhost:{PORT}')
+    app.run(debug=False, host='0.0.0.0', port=PORT)
