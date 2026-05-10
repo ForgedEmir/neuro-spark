@@ -1,0 +1,69 @@
+stages:
+  # ── Étape 1 : Téléchargement ──
+  download:
+    cmd: python scripts/download_eeg.py
+    outs:
+      - data/eeg/
+
+  # ── Étape 2 : Ingestion EDF → Parquet ──
+  ingest:
+    cmd: python src/neuro_spark/pipelines/ingestion.py
+    deps:
+      - data/eeg/
+      - src/neuro_spark/core.py
+      - src/neuro_spark/pipelines/ingestion.py
+    outs:
+      - data/parquet/
+
+  # ── Étape 3 : Feature Engineering ──
+  features:
+    cmd: python src/neuro_spark/pipelines/features.py
+    deps:
+      - data/parquet/
+      - src/neuro_spark/core.py
+      - src/neuro_spark/pipelines/features.py
+    params:
+      - features.t0_weight
+    outs:
+      - data/features/
+
+  # ── Étape 4 : Entraînement CrossValidator ──
+  train:
+    cmd: python src/neuro_spark/pipelines/training.py
+    deps:
+      - data/features/
+      - src/neuro_spark/core.py
+      - src/neuro_spark/pipelines/training.py
+    params:
+      - ml.num_trees_grid
+      - ml.max_depth_grid
+      - ml.cv_folds
+      - split.train_ratio
+    outs:
+      - data/models/
+    metrics:
+      - data/metrics/training.json:
+          cache: false
+
+  # ── Étape 5 : Évaluation ──
+  evaluate:
+    cmd: python src/neuro_spark/pipelines/evaluation.py
+    deps:
+      - data/models/
+      - data/features/
+      - src/neuro_spark/pipelines/evaluation.py
+    outs:
+      - data/predictions/
+    metrics:
+      - data/metrics/evaluation.json:
+          cache: false
+
+  # ── Étape 6 : Export Dashboard ──
+  export_dashboard:
+    cmd: python src/neuro_spark/pipelines/export_dashboard.py
+    deps:
+      - data/features/
+      - data/predictions/
+      - data/parquet/
+    outs:
+      - data/dashboard/

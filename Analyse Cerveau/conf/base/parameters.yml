@@ -1,5 +1,11 @@
-# ── Parameters — Pipeline Configuration ─────────────────────────────────────
+# ── Parameters — Kedro Pipeline Configuration ────────────────────────────────
 # Hyperparamètres exacts utilisés dans poc_eeg.ipynb v2 (CrossValidator)
+
+# ---- Chemins (référencés par les nodes via params:raw.*) ----
+raw:
+  edf_dir: "data/eeg/"
+  parquet_dir: "data/parquet/"
+  models_dir: "data/models/"
 
 # ---- Spark ----
 spark:

@@ -1,26 +1,61 @@
-# ── Data Catalog ────────────────────────────────────────────────────────────
-# Chemins centralisés — inspiré de Kedro sans l'installer.
-# Tous les chemins sont relatifs au conteneur Docker (/opt/spark/).
+ingestion_stats:
+  type: kedro_datasets.json.JSONDataset
+  filepath: data/metrics/ingestion.json
 
-# ---- Phase 1 : Ingestion ----
-raw_eeg:           /opt/spark/data/eeg
-raw_records:       /opt/spark/data/eeg/RECORDS
+# Raw EEG signal partitioned by subject and run
+parquet_data:
+  type: kedro_datasets.spark.SparkDataset
+  filepath: data/parquet/
+  file_format: parquet
+  load_args:
+    mergeSchema: true
+  save_args:
+    mode: overwrite
 
-# ---- Phase 2 : Conversion (EDF → Parquet) ----
-parquet:           /opt/spark/data/parquet
+# FFT band power features, one row per epoch
+features_data:
+  type: kedro_datasets.spark.SparkDataset
+  filepath: data/features/
+  file_format: parquet
+  load_args:
+    mergeSchema: true
+  save_args:
+    mode: overwrite
 
-# ---- Phase 3 : Feature Engineering ----
-features:          /opt/spark/data/features
+# Model predictions on the test set
+predictions_data:
+  type: kedro_datasets.spark.SparkDataset
+  filepath: data/predictions/
+  file_format: parquet
+  save_args:
+    mode: overwrite
 
-# ---- Phase 4 : Entraînement ----
-models:            /opt/spark/data/models
-predictions:       /opt/spark/data/predictions
-metrics:           /opt/spark/data/metrics
+training_metrics:
+  type: kedro_datasets.json.JSONDataset
+  filepath: data/metrics/training.json
 
-# ---- Phase 5 : Dashboard ----
-dashboard:         /opt/spark/data/dashboard
-dashboard_assets:  ./assets
+evaluation_metrics:
+  type: kedro_datasets.json.JSONDataset
+  filepath: data/metrics/evaluation.json
 
-# ---- Monitoring & Tracking ----
-spark_events:      /opt/spark/spark-events
-mlflow_runs:       /opt/spark/mlruns
+# Dashboard exports (one file per artifact)
+dashboard_signal:
+  type: kedro_datasets.spark.SparkDataset
+  filepath: data/dashboard/signal_sample/
+  file_format: parquet
+  save_args:
+    mode: overwrite
+
+dashboard_features:
+  type: kedro_datasets.spark.SparkDataset
+  filepath: data/dashboard/features/
+  file_format: parquet
+  save_args:
+    mode: overwrite
+
+dashboard_predictions:
+  type: kedro_datasets.spark.SparkDataset
+  filepath: data/dashboard/predictions/
+  file_format: parquet
+  save_args:
+    mode: overwrite
