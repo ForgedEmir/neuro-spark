@@ -1,92 +1,90 @@
 # NeuroSpark — Makefile
-# Usage: make help
 
-.PHONY: help up down build download dashboard notebook logs restart status \
+.PHONY: help \
         run ingest features train evaluate export pipeline \
-        test lint lint-fix install-dev clean mlflow-ui
+        download dashboard kedro-viz mlflow-ui mlflow-report \
+        dvc-repro dvc-status dvc-dag \
+        test lint lint-fix install-dev clean
 
-# ── Environnement Spark local ──────────────────────────────────────────────
+# Environnement Spark local (master, JVM, Python du venv, MLflow SQLite)
 KEDRO = KEDRO_DISABLE_TELEMETRY=1 \
         SPARK_MASTER=local[2] \
         SPARK_LOCAL_DIR=spark-tmp \
         JAVA_HOME=/usr/lib/jvm/java-17-openjdk \
         PYSPARK_PYTHON=.venv/bin/python \
         PYSPARK_DRIVER_PYTHON=.venv/bin/python \
-        MLFLOW_TRACKING_URI=mlruns \
+        MLFLOW_TRACKING_URI=sqlite:///mlruns/mlflow.db \
         .venv/bin/python -W ignore -m kedro
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-# ── Pipeline Kedro ─────────────────────────────────────────────────────────
-run: ## Lancer le pipeline complet (Kedro)
+# Pipeline Kedro
+run: ## Lancer la pipeline complete
 	$(KEDRO) run
 
-ingest: ## EDF → Parquet
+ingest: ## Convertir EDF en Parquet
 	$(KEDRO) run --pipeline ingestion
 
-features: ## FFT band power features
+features: ## Extraire les features FFT
 	$(KEDRO) run --pipeline features
 
-train: ## CrossValidator + MLflow tracking
+train: ## Entrainer le modele avec CrossValidator
 	$(KEDRO) run --pipeline training
 
-evaluate: ## Métriques sur le test set
+evaluate: ## Evaluer le modele sur le test set
 	$(KEDRO) run --pipeline evaluation
 
-export: ## Export données dashboard
+export: ## Exporter les donnees pour le dashboard
 	$(KEDRO) run --pipeline export
 
-pipeline: ingest features train evaluate export ## Pipeline complet étape par étape
+pipeline: ingest features train evaluate export ## Pipeline etape par etape
 
-# ── Données ────────────────────────────────────────────────────────────────
-download: ## Télécharger le dataset EEG
+# Donnees
+download: ## Telecharger le dataset EEG depuis PhysioNet
 	.venv/bin/python scripts/download_eeg.py
 
-# ── Dashboard & UI ─────────────────────────────────────────────────────────
+# Dashboard et UIs
 dashboard: ## Lancer le dashboard Dash
 	DASHBOARD_DIR=data/dashboard METRICS_DIR=data/metrics PREDICTIONS_DIR=data/predictions \
 	.venv/bin/python dashboard.py
 
-mlflow-ui: ## Ouvrir MLflow UI (http://localhost:5000)
-	@echo "MLflow UI → http://localhost:5000"
-	MLFLOW_TRACKING_URI=mlruns .venv/bin/mlflow ui
+mlflow-ui: ## Ouvrir MLflow UI sur http://localhost:5000
+	@echo "MLflow UI -> http://localhost:5000"
+	.venv/bin/mlflow ui \
+		--backend-store-uri sqlite:///mlruns/mlflow.db \
+		--default-artifact-root mlruns \
+		--host 127.0.0.1 --port 5000
 
-kedro-viz: ## Visualiser le pipeline Kedro (http://localhost:4141)
-	@echo "Kedro Viz → http://localhost:4141"
+mlflow-report: ## Generer un rapport graphique comparant les runs MLflow
+	MLFLOW_TRACKING_URI=sqlite:///mlruns/mlflow.db .venv/bin/python scripts/mlflow_report.py
+
+kedro-viz: ## Visualiser le DAG Kedro sur http://localhost:4141
+	@echo "Kedro Viz -> http://localhost:4141"
 	KEDRO_DISABLE_TELEMETRY=1 .venv/bin/python -W ignore -m kedro viz run --port 4141
 
-notebook: ## Ouvrir Jupyter
-	@xdg-open http://localhost:8889 2>/dev/null || true
+# DVC (versioning des donnees + reexecution selective)
+dvc-repro: ## Rejouer la pipeline DVC, en sautant les etapes deja calculees
+	.venv/bin/dvc repro
 
-# ── Docker ─────────────────────────────────────────────────────────────────
-up: ## Démarrer le cluster Spark Docker
-	docker-compose up -d
-	@echo "Spark UI  → http://localhost:8080"
-	@echo "Jupyter   → http://localhost:8889"
-	@echo "History   → http://localhost:18080"
+dvc-status: ## Voir l etat des stages DVC
+	.venv/bin/dvc status
 
-down: ## Arrêter le cluster
-	docker-compose down
+dvc-dag: ## Afficher le graphe des stages DVC
+	.venv/bin/dvc dag
 
-build: ## Build l'image Docker
-	docker-compose build
-
-logs: ## Logs des conteneurs
-	docker-compose logs -f --tail=50
-
-# ── Qualité ────────────────────────────────────────────────────────────────
-test: ## Tests unitaires
+# Qualite
+test: ## Lancer les tests unitaires
 	.venv/bin/python -m pytest tests/ -v
 
-lint: ## Vérifier le style (ruff)
+lint: ## Verifier le style avec ruff
 	.venv/bin/ruff check src/ dashboard.py scripts/ --ignore E501
 
 lint-fix: ## Corriger le style automatiquement
 	.venv/bin/ruff check src/ dashboard.py scripts/ --ignore E501 --fix
 
-install-dev: ## Installer les dépendances de dev
+install-dev: ## Installer les outils de dev
 	.venv/bin/pip install ruff pytest
 
 clean: ## Supprimer les fichiers temporaires Spark

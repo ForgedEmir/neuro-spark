@@ -1,69 +1,64 @@
 stages:
-  # ── Étape 1 : Téléchargement ──
   download:
-    cmd: python scripts/download_eeg.py
+    cmd: .venv/bin/python scripts/download_eeg.py
     outs:
       - data/eeg/
 
-  # ── Étape 2 : Ingestion EDF → Parquet ──
   ingest:
-    cmd: python src/neuro_spark/pipelines/ingestion.py
+    cmd: make ingest
     deps:
       - data/eeg/
       - src/neuro_spark/core.py
-      - src/neuro_spark/pipelines/ingestion.py
+      - src/neuro_spark/pipelines/ingestion/
+      - conf/base/parameters.yml
     outs:
       - data/parquet/
+    metrics:
+      - data/metrics/ingestion.json:
+          cache: false
 
-  # ── Étape 3 : Feature Engineering ──
   features:
-    cmd: python src/neuro_spark/pipelines/features.py
+    cmd: make features
     deps:
       - data/parquet/
       - src/neuro_spark/core.py
-      - src/neuro_spark/pipelines/features.py
-    params:
-      - features.t0_weight
+      - src/neuro_spark/pipelines/features/
+      - conf/base/parameters.yml
     outs:
       - data/features/
 
-  # ── Étape 4 : Entraînement CrossValidator ──
   train:
-    cmd: python src/neuro_spark/pipelines/training.py
+    cmd: make train
     deps:
       - data/features/
       - src/neuro_spark/core.py
-      - src/neuro_spark/pipelines/training.py
-    params:
-      - ml.num_trees_grid
-      - ml.max_depth_grid
-      - ml.cv_folds
-      - split.train_ratio
+      - src/neuro_spark/pipelines/training/
+      - conf/base/parameters.yml
     outs:
       - data/models/
     metrics:
       - data/metrics/training.json:
           cache: false
 
-  # ── Étape 5 : Évaluation ──
   evaluate:
-    cmd: python src/neuro_spark/pipelines/evaluation.py
+    cmd: make evaluate
     deps:
-      - data/models/
       - data/features/
-      - src/neuro_spark/pipelines/evaluation.py
+      - data/models/
+      - src/neuro_spark/pipelines/evaluation/
+      - conf/base/parameters.yml
     outs:
       - data/predictions/
     metrics:
       - data/metrics/evaluation.json:
           cache: false
 
-  # ── Étape 6 : Export Dashboard ──
-  export_dashboard:
-    cmd: python src/neuro_spark/pipelines/export_dashboard.py
+  export:
+    cmd: make export
     deps:
+      - data/parquet/
       - data/features/
       - data/predictions/
-      - data/parquet/
+      - src/neuro_spark/pipelines/export_dashboard/
     outs:
       - data/dashboard/

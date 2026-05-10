@@ -1,0 +1,167 @@
+schema: '2.0'
+stages:
+  download:
+    cmd: .venv/bin/python scripts/download_eeg.py
+    outs:
+    - path: data/eeg/
+      hash: md5
+      md5: 18b5fbd3bffa69d8eef889f2a0db309c.dir
+      size: 3538136000
+      nfiles: 1526
+  ingest:
+    cmd: make ingest
+    deps:
+    - path: conf/base/parameters.yml
+      hash: md5
+      md5: 34cd287af07f8bf955a13f2d3088db88
+      size: 1979
+      isexec: true
+    - path: data/eeg/
+      hash: md5
+      md5: 18b5fbd3bffa69d8eef889f2a0db309c.dir
+      size: 3538136000
+      nfiles: 1526
+    - path: src/neuro_spark/core.py
+      hash: md5
+      md5: 6b8bd49c7450b3ddc3524d5d985bf988
+      size: 9860
+      isexec: true
+    - path: src/neuro_spark/pipelines/ingestion/
+      hash: md5
+      md5: 9f761609b4d5f32d7ebd8d7db9133ae7.dir
+      size: 2822
+      nfiles: 6
+    outs:
+    - path: data/metrics/ingestion.json
+      hash: md5
+      md5: 9354f2750e992a5b170f55fa6fd47e93
+      size: 54
+    - path: data/parquet/
+      hash: md5
+      md5: 92d637aae77747df7b779151564e05da.dir
+      size: 3489686368
+      nfiles: 2091
+  features:
+    cmd: make features
+    deps:
+    - path: conf/base/parameters.yml
+      hash: md5
+      md5: 34cd287af07f8bf955a13f2d3088db88
+      size: 1979
+      isexec: true
+    - path: data/parquet/
+      hash: md5
+      md5: 92d637aae77747df7b779151564e05da.dir
+      size: 3489686368
+      nfiles: 2091
+    - path: src/neuro_spark/core.py
+      hash: md5
+      md5: 6b8bd49c7450b3ddc3524d5d985bf988
+      size: 9860
+      isexec: true
+    - path: src/neuro_spark/pipelines/features/
+      hash: md5
+      md5: ee91ed469a7f96d0b8df251c3850bc57.dir
+      size: 3907
+      nfiles: 6
+    outs:
+    - path: data/features/
+      hash: md5
+      md5: 9dfda2d4bd2fa033a14f0815e1f9d83d.dir
+      size: 10476035
+      nfiles: 28
+  train:
+    cmd: make train
+    deps:
+    - path: conf/base/parameters.yml
+      hash: md5
+      md5: 34cd287af07f8bf955a13f2d3088db88
+      size: 1979
+      isexec: true
+    - path: data/features/
+      hash: md5
+      md5: 9dfda2d4bd2fa033a14f0815e1f9d83d.dir
+      size: 10476035
+      nfiles: 28
+    - path: src/neuro_spark/core.py
+      hash: md5
+      md5: 6b8bd49c7450b3ddc3524d5d985bf988
+      size: 9860
+      isexec: true
+    - path: src/neuro_spark/pipelines/training/
+      hash: md5
+      md5: b9ced8f58f5317408d7570105fabace2.dir
+      size: 7174
+      nfiles: 6
+    outs:
+    - path: data/metrics/training.json
+      hash: md5
+      md5: 2b5687f259272e196c16a8444418adaf
+      size: 149
+    - path: data/models/
+      hash: md5
+      md5: 16bb543d8e165f66116f6302f90bc825.dir
+      size: 175108
+      nfiles: 52
+  evaluate:
+    cmd: make evaluate
+    deps:
+    - path: conf/base/parameters.yml
+      hash: md5
+      md5: 34cd287af07f8bf955a13f2d3088db88
+      size: 1979
+      isexec: true
+    - path: data/features/
+      hash: md5
+      md5: 9dfda2d4bd2fa033a14f0815e1f9d83d.dir
+      size: 10476035
+      nfiles: 28
+    - path: data/models/
+      hash: md5
+      md5: 16bb543d8e165f66116f6302f90bc825.dir
+      size: 175108
+      nfiles: 52
+    - path: src/neuro_spark/pipelines/evaluation/
+      hash: md5
+      md5: 24775549a48f20d5ca50c8101beaaecc.dir
+      size: 3870
+      nfiles: 6
+    outs:
+    - path: data/metrics/evaluation.json
+      hash: md5
+      md5: 2b5687f259272e196c16a8444418adaf
+      size: 149
+    - path: data/predictions/
+      hash: md5
+      md5: c7fd2d462dbe4245bea4fa626721bd29.dir
+      size: 12381
+      nfiles: 6
+  export:
+    cmd: make export
+    deps:
+    - path: data/features/
+      hash: md5
+      md5: 9dfda2d4bd2fa033a14f0815e1f9d83d.dir
+      size: 10476035
+      nfiles: 28
+    - path: data/parquet/
+      hash: md5
+      md5: 92d637aae77747df7b779151564e05da.dir
+      size: 3489686368
+      nfiles: 2091
+    - path: data/predictions/
+      hash: md5
+      md5: c7fd2d462dbe4245bea4fa626721bd29.dir
+      size: 12381
+      nfiles: 6
+    - path: src/neuro_spark/pipelines/export_dashboard/
+      hash: md5
+      md5: 48804111cf6c2e0695275fa463b61a39.dir
+      size: 4474
+      nfiles: 6
+    outs:
+    - path: data/dashboard/
+      hash: md5
+      md5: b491ba6817d32b2aeac8ce0eac05715b.dir
+      size: 20879248
+      nfiles: 33
