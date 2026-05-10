@@ -1,5 +1,4 @@
 import os
-import time
 import logging
 from typing import Optional, Callable
 import numpy as np
@@ -13,7 +12,7 @@ from pyspark.ml.feature import VectorAssembler, StringIndexer
 from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder, CrossValidatorModel
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import DataFrame
 
 log = logging.getLogger(__name__)
 
@@ -274,16 +273,3 @@ def evaluate_model(model: CrossValidatorModel, test_df: DataFrame) -> dict:
     return {"predictions": predictions, "metrics": metrics}
 
 
-def timed_step(name: str, fn: Callable, *args, **kwargs):
-    """Run a function and log how long it took."""
-    t0 = time.time()
-    result = fn(*args, **kwargs)
-    elapsed = time.time() - t0
-    log.info(f"{name} completed in {elapsed:.1f}s")
-    return result, elapsed
-
-
-def optimize_delta_table(spark: SparkSession, path: str) -> None:
-    """Compact small Delta files and remove old snapshots."""
-    spark.sql(f"OPTIMIZE delta.`{path}`")
-    spark.sql(f"VACUUM delta.`{path}` RETAIN 168 HOURS")
