@@ -4,6 +4,7 @@
         run ingest features train evaluate export pipeline \
         download dashboard kedro-viz mlflow-ui mlflow-report \
         dvc-repro dvc-status dvc-dag \
+        demo eeg-stream-run eeg-producer eeg-dashboard eeg-reset \
         test lint lint-fix install-dev clean
 
 # Environnement Spark local (master, JVM, Python du venv, MLflow SQLite)
@@ -45,6 +46,24 @@ pipeline: ingest features train evaluate export ## Pipeline etape par etape
 download: ## Telecharger le dataset EEG depuis PhysioNet
 	.venv/bin/python scripts/download_eeg.py
 
+# EEG BCI Live (streaming)
+demo: ## Demo EEG BCI live TOUT-EN-UN (Ctrl+C arrete tout) → http://localhost:8052
+	@./scripts/run_demo_eeg.sh
+
+eeg-reset: ## Vider input/output/checkpoint EEG avant un nouveau run
+	rm -rf data/stream_eeg/input data/stream_eeg/output data/stream_eeg/checkpoint
+	mkdir -p data/stream_eeg/input
+
+eeg-stream-run: ## Lancer Spark Streaming EEG (BCI + topomap, timeout 15 min)
+	$(KEDRO) run --pipeline streaming_eeg
+
+eeg-producer: ## Stream un sujet EEG (defaut S001/R04 imagined hands)
+	.venv/bin/python scripts/stream_producer_eeg.py --subject S001 --run R04 --rate 0.5 --duration 300 --loop
+
+eeg-dashboard: ## Dashboard EEG live sur http://localhost:8052
+	@echo "Dashboard EEG BCI -> http://localhost:8052"
+	.venv/bin/python dashboard_eeg.py
+
 # Dashboard et UIs
 dashboard: ## Lancer le dashboard Dash
 	DASHBOARD_DIR=data/dashboard METRICS_DIR=data/metrics PREDICTIONS_DIR=data/predictions \
@@ -79,10 +98,10 @@ test: ## Lancer les tests unitaires
 	.venv/bin/python -m pytest tests/ -v
 
 lint: ## Verifier le style avec ruff
-	.venv/bin/ruff check src/ dashboard.py scripts/ --ignore E501
+	.venv/bin/ruff check src/ dashboard.py dashboard_eeg.py scripts/ --ignore E501
 
 lint-fix: ## Corriger le style automatiquement
-	.venv/bin/ruff check src/ dashboard.py scripts/ --ignore E501 --fix
+	.venv/bin/ruff check src/ dashboard.py dashboard_eeg.py scripts/ --ignore E501 --fix
 
 install-dev: ## Installer les outils de dev
 	.venv/bin/pip install ruff pytest

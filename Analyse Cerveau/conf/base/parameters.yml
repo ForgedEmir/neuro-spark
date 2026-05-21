@@ -59,3 +59,11 @@ mlflow:
   experiment_name: "neuro-spark-eeg-v2"
   tracking_uri: "file:///opt/spark/mlruns"
   autolog: true
+
+# ── Streaming EEG (BCI live + topomap alpha) ─────────────────────────────────
+streaming_eeg:
+  input_dir: "data/stream_eeg/input"
+  output_dir: "data/stream_eeg/output"
+  checkpoint_dir: "data/stream_eeg/checkpoint"
+  model_cache: "data/models/sklearn_rf.pkl"
+  timeout_seconds: 900

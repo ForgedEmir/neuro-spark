@@ -59,3 +59,8 @@ dashboard_predictions:
   file_format: parquet
   save_args:
     mode: overwrite
+
+# ── Streaming EEG (BCI live) ─────────────────────────────────────────────────
+streaming_eeg_metrics:
+  type: kedro_datasets.json.JSONDataset
+  filepath: data/metrics/streaming_eeg.json
