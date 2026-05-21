@@ -7,7 +7,7 @@
             --paper-hi: #f0eadf;
             --ink: #2b2a26;
             --tx: #3d3a33;
-            --muted: #8a8276;
+            --muted: #736B60;
             --bord: rgba(60, 50, 40, 0.10);
             --bord-strong: rgba(60, 50, 40, 0.18);
             --corail: #e07a5f;
@@ -36,11 +36,13 @@
         }
         ::-webkit-scrollbar-thumb:hover { background: var(--bord-strong); }
 
-        /* ── Header ── */
+        /* ── Header (avec effet glassmorphism translucide) ── */
         .ns-header {
             display: flex; align-items: center; justify-content: space-between;
             padding: 24px 48px;
-            background: var(--bg);
+            background: rgba(247, 243, 236, 0.78);
+            -webkit-backdrop-filter: blur(14px) saturate(140%);
+            backdrop-filter: blur(14px) saturate(140%);
             position: sticky; top: 0; z-index: 100;
             border-bottom: 1px solid var(--bord);
         }
@@ -220,4 +222,41 @@
         /* Loading */
         ._dash-loading-callback {
             background: rgba(247,243,236,0.6) !important;
+        }
+
+        /* ── Responsive ── */
+        /* Laptops 13-14 pouces et tablettes paysage */
+        @media (max-width: 1280px) {
+            .ns-header, .hero, .kpi-row, .grid-2, .grid-full, .footer {
+                padding-left: 28px;
+                padding-right: 28px;
+            }
+            .kpi-row { grid-template-columns: repeat(3, 1fr); }
+            .grid-2 { grid-template-columns: 1fr; }
+            .grid-2 > .card { min-width: 0; }
+            .hero h2 { font-size: 28px; }
+            .kpi-val { font-size: 30px; }
+        }
+
+        /* Tablettes portrait */
+        @media (max-width: 900px) {
+            .ns-header, .hero, .kpi-row, .grid-2, .grid-full, .footer {
+                padding-left: 18px;
+                padding-right: 18px;
+            }
+            .kpi-row { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        /* Téléphones */
+        @media (max-width: 600px) {
+            .kpi-row { grid-template-columns: 1fr; }
+            .ns-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 14px;
+                padding: 18px;
+            }
+            .hero h2 { font-size: 24px; }
+            .kpi-val { font-size: 26px; }
+            .brain-controls { flex-direction: column; align-items: stretch; }
         }

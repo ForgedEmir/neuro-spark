@@ -88,13 +88,21 @@ DIFF_BRAIN = [
 GL = dict(
     paper_bgcolor=PAPER, plot_bgcolor=PAPER,
     font=dict(color=TX, family='Inter, system-ui, sans-serif', size=12),
-    margin=dict(l=44, r=24, t=52, b=44),
+    # marges réduites : le padding 20px 22px de la carte gère l'espacement extérieur
+    margin=dict(l=32, r=16, t=46, b=32),
     hoverlabel=dict(bgcolor=PAPER, bordercolor=BORD,
                     font=dict(color=INK, family='Inter', size=12)),
     title=dict(font=dict(size=15, color=INK,
                           family='Fraunces, Georgia, serif'),
                x=0.02, xanchor='left'),
     colorway=[OCEAN, CORAIL, SAUGE, AMBRE, ROSE, LAVANDE],
+    # axes épurés en valeurs par défaut (les figures peuvent override sans conflit)
+    template=dict(
+        layout=dict(
+            xaxis=dict(zeroline=False, ticks='', showline=False),
+            yaxis=dict(zeroline=False, ticks='', showline=False),
+        )
+    ),
 )
 
 # ── KPI calculs ──────────────────────────────────────────────────────────────
@@ -624,16 +632,19 @@ app.layout = html.Div([
                     html.Button('▶ Play', id='topo-play-btn',
                                 n_clicks=0,
                                 style={
-                                    'padding': '8px 20px',
+                                    'padding': '10px 24px',
                                     'borderRadius': '999px',
-                                    'border': f'1.5px solid {CORAIL}',
-                                    'background': 'transparent',
-                                    'color': CORAIL,
+                                    'border': 'none',
+                                    'background': CORAIL,
+                                    'color': PAPER,
                                     'fontFamily': 'Inter, sans-serif',
                                     'fontSize': '13px',
-                                    'fontWeight': '500',
+                                    'fontWeight': '600',
+                                    'letterSpacing': '0.02em',
                                     'cursor': 'pointer',
-                                    'transition': 'all 0.2s',
+                                    'boxShadow': '0 4px 12px rgba(224, 122, 95, 0.30), '
+                                                 '0 2px 4px rgba(224, 122, 95, 0.15)',
+                                    'transition': 'all 0.2s ease',
                                 }),
                 ]),
                 dcc.Interval(id='topo-interval', interval=2000, disabled=True, n_intervals=0),
