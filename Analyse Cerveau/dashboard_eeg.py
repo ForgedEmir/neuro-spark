@@ -710,19 +710,10 @@ app.layout = html.Div([
             }),
             dcc.Dropdown(
                 id="subject-select",
-                options=[
-                    {"label": f"{s}  {'(train ⚠)' if s in TRAIN_SUBJECTS else '(hors-train ✓)'}",
-                     "value": s}
-                    for s in SUBJECTS
-                ],
+                options=[{"label": s, "value": s} for s in SUBJECTS],
                 value=DEFAULT_SUBJECT,
                 clearable=False,
-                style={"width": "240px", "fontSize": "13px"},
-            ),
-            html.Span(
-                "  ← un sujet HORS-train donne de vraies variations (les sujets "
-                "train = 100 % par data leakage)",
-                style={"color": MUTED, "fontSize": "11px", "marginLeft": "10px"},
+                style={"width": "180px", "fontSize": "13px"},
             ),
         ], style={"display": "flex", "alignItems": "center", "marginTop": "12px"}),
     ], style={"padding": "28px 32px 12px 32px"}),
