@@ -1,0 +1,4 @@
+# Dashboard streaming outputs
+streaming_stats:
+  type: kedro_datasets.json.JSONDataset
+  filepath: data/metrics/streaming.json

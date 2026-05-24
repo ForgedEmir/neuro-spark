@@ -1,1028 +1,528 @@
-"""Dashboard streaming EEG INTERACTIF.
+#!/usr/bin/env python3
+"""Dashboard EEG en temps réel — lit les Parquet du streaming Spark distribué.
 
-Mode pilote : l'utilisateur clique sur un bouton (Repos / Mouvement réel /
-Mouvement imaginé) et le dashboard envoie un epoch correspondant dans le
-file source de Spark. Le système prédit, et le dashboard affiche le résultat
-avec **annotations pédagogiques** (qu'est-ce qu'on est censé voir ?).
-
-Lancer :
-    make demo        # Spark + dashboard ; toi tu pilotes les epochs
+Anti memory-leak : ne charge que les N fichiers les plus récents.
+Actualisation toutes les 2 secondes via Dash Interval.
 """
 from __future__ import annotations
 
 import logging
-import random
-import time
-import uuid
 from pathlib import Path
 
-import mne
 import numpy as np
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
-from dash import ALL, Dash, Input, Output, State, callback_context, dcc, html
-from scipy.interpolate import griddata
+import dash
+from dash import dcc, html, Input, Output, State
 
-logging.getLogger("werkzeug").setLevel(logging.WARNING)
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
+# ── Chemins ──────────────────────────────────────────────────────────────────
+BASE = Path(__file__).resolve().parent
+PRED_DIR = BASE / "data" / "stream_eeg" / "predictions"
+TOPO_DIR = BASE / "data" / "stream_eeg" / "topomap"
 
-# ── Config ───────────────────────────────────────────────────────────────────
-PARQUET_DIR = Path("data/parquet")
-STREAM_INPUT = Path("data/stream_eeg/input")
-PRED_DIR = Path("data/stream_eeg/output/predictions")
-TOPO_DIR = Path("data/stream_eeg/output/topomap")
-REFRESH_MS = 1500
-
-EEG_FS = 160
-EPOCH_SAMPLES = EEG_FS * 2
-
-# Palette
-BG, PAPER, CARD_HI = "#f5f1e8", "#fbf8f2", "#f0eadf"
-INK, TX, MUTED = "#2b2a26", "#3d3a33", "#9a9183"
-BORD = "rgba(60, 50, 40, 0.08)"
-GRID = "rgba(60, 50, 40, 0.05)"
-
-COLOR_T0 = "#9aa8b3"
-COLOR_T1 = "#5b8baf"
-COLOR_T2 = "#c44536"
-AMBRE = "#d9a441"
-CLASS_COLORS = {"T0": COLOR_T0, "T1": COLOR_T1, "T2": COLOR_T2}
-CLASS_LABELS = {
-    "T0": "Repos",
-    "T1": "Mouvement réel",
-    "T2": "Mouvement imaginé",
-}
-CLASS_HINTS = {
-    "T0": "Le sujet est au **repos**. Regarde la **zone centrale encerclée** "
-          "(cortex moteur C3/Cz/C4) : l'alpha y est **élevé** (rouge) car les "
-          "neurones moteurs sont au repos — pas d'intention de mouvement.",
-    "T1": "Le sujet **bouge réellement** sa main. La **zone centrale encerclée** "
-          "(C3/Cz/C4) devient **bleue** : l'alpha chute car le cortex moteur "
-          "s'active — c'est l'**ERD** (Event-Related Desynchronization).",
-    "T2": "Le sujet **imagine** bouger sa main, sans mouvement réel. Même "
-          "signature : la **zone centrale encerclée** vire au **bleu** (ERD). "
-          "La pensée seule suffit à désynchroniser le cortex moteur.",
-}
-
-PLOTLY_BASE = dict(
-    paper_bgcolor=PAPER, plot_bgcolor=PAPER,
-    font=dict(color=TX, family="Inter, system-ui, sans-serif", size=12),
-    margin=dict(l=48, r=24, t=44, b=44),
-    hoverlabel=dict(bgcolor=PAPER, bordercolor=BORD, font=dict(color=INK)),
-    showlegend=False,
-    transition=dict(duration=300, easing="cubic-in-out"),
-)
-
-
-# ── Positions 10-20 ──────────────────────────────────────────────────────────
-def _load_positions() -> dict[str, tuple[float, float]]:
-    montage = mne.channels.make_standard_montage("standard_1020")
-    raw_pos = montage.get_positions()["ch_pos"]
-    pos = {n: (float(p[0]), float(p[1])) for n, p in raw_pos.items()}
-    xs = [p[0] for p in pos.values()]
-    ys = [p[1] for p in pos.values()]
-    mx = max(abs(min(xs)), abs(max(xs))) * 1.05
-    my = max(abs(min(ys)), abs(max(ys))) * 1.05
-    return {n: (x / mx, y / my) for n, (x, y) in pos.items()}
-
-
-POSITIONS = _load_positions()
-HIGHLIGHT_CHANNELS = {"C3", "Cz", "C4"}  # mises en évidence
-
-
-# ── Banque d'epochs (chargée au démarrage) ───────────────────────────────────
-def _alpha_at(epoch: pd.DataFrame, channel: str) -> float:
-    """Puissance alpha (8-13 Hz) d'un canal pour un epoch donné."""
-    col = next((c for c in epoch.columns
-                if c.replace(".", "") == channel.replace(".", "")), None)
-    if col is None:
-        return 0.0
-    sig = epoch[col].values
-    n = len(sig)
-    freqs = np.fft.rfftfreq(n, 1.0 / EEG_FS)
-    spec = np.abs(np.fft.rfft(sig)) ** 2
-    mask = (freqs >= 8) & (freqs < 13)
-    return float(np.mean(spec[mask])) if mask.any() else 0.0
-
-
-# Sujets disponibles + lesquels sont dans le train du sklearn (= 5 premiers)
-SUBJECTS = sorted({p.name.split("_")[0] for p in PARQUET_DIR.glob("*.parquet")})
-TRAIN_SUBJECTS = set(SUBJECTS[:5])    # les 60 premiers fichiers ≈ S001-S005
-# Défaut = S001 (train) → les 3 classes sont bien prédites pour les démos boutons.
-# Pour montrer la vraie performance, bascule sur un sujet hors-train (S010+).
-DEFAULT_SUBJECT = "S001" if "S001" in SUBJECTS else SUBJECTS[0]
-log.info("%d sujets disponibles · train=%s · défaut=%s",
-         len(SUBJECTS), sorted(TRAIN_SUBJECTS), DEFAULT_SUBJECT)
-
-EPOCH_COUNTER = {"value": 0}
-_bank_cache: dict[str, dict] = {}
-# Métriques live : on note l'heure d'envoi de chaque epoch pour mesurer la latence
-_send_times: dict[int, float] = {}
-_metrics = {"latency": None, "throughput": None, "batch_kb": None,
-            "session_start": None}
-
-
-def get_epoch_bank(subject: str) -> dict[str, list[pd.DataFrame]]:
-    """Banque d'epochs (top 20 par classe) pour un sujet donné, avec cache."""
-    if subject in _bank_cache:
-        return _bank_cache[subject]
-    scored: dict[str, list[tuple[float, pd.DataFrame]]] = {"T0": [], "T1": [], "T2": []}
-    for p in sorted(PARQUET_DIR.glob(f"{subject}_*.parquet")):
-        df = pd.read_parquet(p)
-        n = len(df) // EPOCH_SAMPLES
-        for i in range(n):
-            chunk = df.iloc[i * EPOCH_SAMPLES:(i + 1) * EPOCH_SAMPLES].copy()
-            label = chunk["task_label"].mode().iloc[0]
-            if label not in scored:
-                continue
-            chunk["epoch_label"] = label
-            motor = (_alpha_at(chunk, "C3") + _alpha_at(chunk, "C4")
-                     + _alpha_at(chunk, "Cz"))
-            score = motor if label == "T0" else -motor
-            scored[label].append((score, chunk))
-    top: dict[str, list[pd.DataFrame]] = {}
-    for label, lst in scored.items():
-        lst.sort(key=lambda x: x[0], reverse=True)
-        top[label] = [e for _, e in lst[:20]]
-    _bank_cache[subject] = top
-    log.info("Bank %s : T0=%d T1=%d T2=%d",
-             subject, len(top["T0"]), len(top["T1"]), len(top["T2"]))
-    return top
-
-
-def _load_epoch_bank_for_baseline(parquet_dir: Path, max_files: int = 25) -> dict:
-    """Charge un échantillon d'epochs (toutes classes) juste pour la baseline Z-score."""
-    full: dict[str, list[pd.DataFrame]] = {"T0": [], "T1": [], "T2": []}
-    for p in sorted(parquet_dir.glob("*.parquet"))[:max_files]:
-        df = pd.read_parquet(p)
-        n = len(df) // EPOCH_SAMPLES
-        for i in range(n):
-            chunk = df.iloc[i * EPOCH_SAMPLES:(i + 1) * EPOCH_SAMPLES].copy()
-            label = chunk["task_label"].mode().iloc[0]
-            if label in full:
-                full[label].append(chunk)
-    return full
-
-
-def _compute_baseline_stats(bank: dict[str, list[pd.DataFrame]]) -> tuple[dict, dict]:
-    """Pour chaque canal, calcule mean et std du log10(alpha power) sur
-    *toutes les classes confondues* (T0 + T1 + T2).
-
-    → Un epoch T0 (repos, alpha élevé) aura un Z > 0 sur la plupart des
-      électrodes → ROUGE.
-    → Un epoch T1/T2 (motor, ERD) aura un Z < 0 sur le motor cortex → BLEU.
-    """
-    powers: dict[str, list[float]] = {}
-    n_total = 0
-    for label_epochs in bank.values():
-        for epoch in label_epochs:
-            n_total += 1
-            eeg_cols = [c for c in epoch.columns
-                        if c not in {"subject_id", "run_id", "time",
-                                     "task_label", "epoch_id", "epoch_label",
-                                     "event_time"}]
-            for ch in eeg_cols:
-                sig = epoch[ch].values
-                n = len(sig)
-                freqs = np.fft.rfftfreq(n, 1.0 / EEG_FS)
-                spec = np.abs(np.fft.rfft(sig)) ** 2
-                mask = (freqs >= 8) & (freqs < 13)
-                power = float(np.mean(spec[mask])) if mask.any() else 1e-12
-                powers.setdefault(ch.replace(".", ""), []).append(
-                    np.log10(power + 1e-12)
-                )
-
-    mean = {ch: float(np.mean(vals)) for ch, vals in powers.items()}
-    std = {ch: float(np.std(vals)) + 1e-6 for ch, vals in powers.items()}
-    log.info("Baseline stats globale (T0+T1+T2) sur %d canaux (n=%d epochs)",
-             len(mean), n_total)
-    return mean, std
-
-
-BASELINE_MEAN, BASELINE_STD = _compute_baseline_stats(
-    _load_epoch_bank_for_baseline(PARQUET_DIR)
-)
-
-
-def _write_epoch(epoch: pd.DataFrame, run_seq: int = 0) -> int:
-    """Écrit un epoch en stream input. Renvoie le nouveau epoch_id global."""
-    STREAM_INPUT.mkdir(parents=True, exist_ok=True)
-    epoch = epoch.copy()
-    EPOCH_COUNTER["value"] += 1
-    epoch["epoch_id"] = EPOCH_COUNTER["value"]
-    epoch["event_time"] = pd.Timestamp.now(tz="UTC").strftime(
-        "%Y-%m-%dT%H:%M:%S.%f"
-    )
-    if "run_seq" not in epoch.columns:
-        epoch["run_seq"] = run_seq
-
-    eeg_cols = [c for c in epoch.columns
-                if c not in {"subject_id", "run_id", "time", "task_label",
-                             "epoch_id", "epoch_label", "event_time", "run_seq"}]
-    epoch[eeg_cols] = epoch[eeg_cols].astype(np.float64)
-    epoch["time"] = epoch["time"].astype(np.float64)
-
-    fname = f"{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}.parquet"
-    path = STREAM_INPUT / fname
-    epoch.to_parquet(path, index=False)
-    # métriques : noter l'heure d'envoi + la taille du paquet
-    _send_times[EPOCH_COUNTER["value"]] = time.time()
-    if _metrics["session_start"] is None:
-        _metrics["session_start"] = time.time()
-    try:
-        _metrics["batch_kb"] = path.stat().st_size / 1024
-    except OSError:
-        pass
-    return EPOCH_COUNTER["value"]
-
-
-def _send_epoch(label: str, subject: str) -> str:
-    """Pioche un epoch du label demandé (sujet donné) et le dépose dans STREAM_INPUT."""
-    epochs = get_epoch_bank(subject).get(label, [])
-    if not epochs:
-        return f"Aucun epoch {label} pour {subject}"
-    epoch = random.choice(epochs)
-    eid = _write_epoch(epoch, run_seq=0)
-    log.info("Sent epoch #%d (%s, label=%s)", eid, subject, label)
-    return f"Envoyé : {CLASS_LABELS[label]} · {subject} (epoch #{eid})"
-
-
-
-
-# ── Chargement résilient ─────────────────────────────────────────────────────
-def _safe_read(path: Path) -> pd.DataFrame:
-    if not path.exists():
-        return pd.DataFrame()
-    try:
-        return pd.read_parquet(path)
-    except Exception:
+# ── Chargement résilient et optimisé (Anti Memory-Leak) ──────────────────────
+def _read_latest_parquets(dir_path: Path, max_files: int) -> pd.DataFrame:
+    """Ne lit que les N fichiers Parquet les plus récents pour soulager la RAM."""
+    if not dir_path.exists():
         return pd.DataFrame()
 
+    files = list(dir_path.glob("*.parquet"))
+    if not files:
+        return pd.DataFrame()
+
+    # Tri par date de modification décroissante (le plus récent en premier)
+    files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+
+    try:
+        # Concatène uniquement l'historique récent nécessaire au dashboard
+        return pd.concat([pd.read_parquet(f) for f in files[:max_files]], ignore_index=True)
+    except Exception as e:
+        log.error("Erreur lecture Parquet : %s", e)
+        return pd.DataFrame()
 
 def load_predictions() -> pd.DataFrame:
-    df = _safe_read(PRED_DIR)
+    # On ne lit que les 10 derniers batchs (suffisant pour la timeline temporelle)
+    df = _read_latest_parquets(PRED_DIR, max_files=10)
     if df.empty:
         return df
     df["event_time"] = pd.to_datetime(df["event_time"])
     df = df.sort_values("event_time").drop_duplicates("epoch_id", keep="last")
     return df.tail(100).reset_index(drop=True)
 
-
 def load_topomap() -> tuple[pd.DataFrame, int | None]:
-    """Renvoie (df, epoch_id) du DERNIER epoch arrivé. epoch_id sert d'uirevision
-    pour forcer Plotly à redessiner la figure même si seules les couleurs changent.
-    """
-    df = _safe_read(TOPO_DIR)
+    # On ne lit que les 2 derniers batchs pour afficher l'image de la topomap actuelle
+    df = _read_latest_parquets(TOPO_DIR, max_files=2)
     if df.empty:
         return df, None
     df["event_time"] = pd.to_datetime(df["event_time"])
-    # le DERNIER en event_time, pas le epoch_id max (qui peut être stale si checkpoint reset)
     last_time = df["event_time"].max()
     last_df = df[df["event_time"] == last_time].copy()
     last_epoch_id = int(last_df["epoch_id"].iloc[0])
     return last_df, last_epoch_id
 
 
-# ── Topomap richement annoté ─────────────────────────────────────────────────
-def _add_head_outline(fig: go.Figure) -> None:
-    theta = np.linspace(0, 2 * np.pi, 100)
+# ── Palette « Clinique chaleureux » ──────────────────────────────────────────
+BG       = '#f7f3ec'   # ivoire chaud
+PAPER    = '#fbf8f2'   # crème
+CARD_HI  = '#f0eadf'
+INK      = '#2b2a26'
+TX       = '#3d3a33'
+MUTED    = '#8a8276'
+BORD     = 'rgba(60, 50, 40, 0.10)'
+GRID     = 'rgba(60, 50, 40, 0.06)'
+
+CORAIL   = '#e07a5f'
+SAUGE    = '#7a9b76'
+OCEAN    = '#5b8baf'
+AMBRE    = '#d9a441'
+ROSE     = '#c9748a'
+
+CLS_COLORS = {'T0': OCEAN, 'T1': CORAIL, 'T2': SAUGE}
+CLS_NAMES  = ['T0', 'T1', 'T2']
+
+WARM_BRAIN = [
+    [0.00, '#5b8baf'],
+    [0.25, '#a8c5b8'],
+    [0.50, '#f4ead5'],
+    [0.75, '#e9a87c'],
+    [1.00, '#c44536'],
+]
+
+GL = dict(
+    paper_bgcolor=PAPER, plot_bgcolor=PAPER,
+    font=dict(color=TX, family='Inter, system-ui, sans-serif', size=12),
+    margin=dict(l=44, r=24, t=52, b=44),
+    hoverlabel=dict(bgcolor=PAPER, bordercolor=BORD,
+                    font=dict(color=INK, family='Inter', size=12)),
+    title=dict(font=dict(size=15, color=INK,
+                          family='Fraunces, Georgia, serif'),
+               x=0.02, xanchor='left'),
+    colorway=[OCEAN, CORAIL, SAUGE, AMBRE, ROSE],
+)
+
+
+# ── Montage EEG 10-05 ────────────────────────────────────────────────────────
+PHYSIONET_64 = [
+    'Fc5','Fc3','Fc1','Fcz','Fc2','Fc4','Fc6',
+    'C5','C3','C1','Cz','C2','C4','C6',
+    'Cp5','Cp3','Cp1','Cpz','Cp2','Cp4','Cp6',
+    'Fp1','Fpz','Fp2','Af7','Af3','Afz','Af4','Af8',
+    'F7','F5','F3','F1','Fz','F2','F4','F6','F8',
+    'Ft7','Ft8','T7','T8','T9','T10',
+    'Tp7','Tp8','P7','P5','P3','P1','Pz','P2','P4','P6','P8',
+    'Po7','Po3','Poz','Po4','Po8','O1','Oz','O2','Iz',
+]
+
+import mne
+mne.set_log_level('ERROR')
+_montage = mne.channels.make_standard_montage('standard_1005')
+_pos3d_all = _montage.get_positions()['ch_pos']
+_lookup = {k.lower(): k for k in _pos3d_all.keys()}
+CH_NAMES, CH_POS3D = [], []
+for ch in PHYSIONET_64:
+    key = _lookup.get(ch.lower())
+    if key is not None:
+        CH_NAMES.append(ch.upper())
+        CH_POS3D.append(_pos3d_all[key])
+CH_POS3D = np.array(CH_POS3D)
+
+def _project_2d(pos3d):
+    x, y, z = pos3d[:, 0], pos3d[:, 1], pos3d[:, 2]
+    r  = np.sqrt(x**2 + y**2 + z**2)
+    theta = np.arccos(z / np.maximum(r, 1e-9))
+    phi   = np.arctan2(y, x)
+    rho   = np.sin(theta) / (1 + np.cos(theta) + 1e-9)
+    return rho * np.cos(phi), rho * np.sin(phi)
+
+CH_X2D, CH_Y2D = _project_2d(CH_POS3D)
+MAX_R = max(np.sqrt(CH_X2D**2 + CH_Y2D**2).max() * 1.05, 0.6)
+
+
+# ── Graphiques ───────────────────────────────────────────────────────────────
+def fig_live_accuracy(pred_df: pd.DataFrame) -> go.Figure:
+    """Accuracy glissante (rolling window 10)."""
+    df = pred_df.copy()
+    df["correct"] = df["correct"].astype(int)
+    df["rolling_acc"] = df["correct"].rolling(window=min(10, len(df)), min_periods=1).mean()
+    df["epoch_idx"] = range(len(df))
+
+    fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=1.05 * np.cos(theta), y=1.05 * np.sin(theta),
-        mode="lines", line=dict(color=MUTED, width=2),
-        hoverinfo="skip",
+        x=df["epoch_idx"], y=df["rolling_acc"],
+        mode='lines+markers', name='Accuracy glissante',
+        line=dict(color=OCEAN, width=2.5),
+        marker=dict(color=CORAIL, size=5, opacity=0.6),
+        hovertemplate='Epoch %{x}<br>Acc: %{y:.1%}<extra></extra>',
     ))
-    fig.add_trace(go.Scatter(
-        x=[-0.08, 0, 0.08, -0.08], y=[1.02, 1.18, 1.02, 1.02],
-        mode="lines", line=dict(color=MUTED, width=2),
-        hoverinfo="skip", fill="toself", fillcolor="rgba(0,0,0,0)",
-    ))
-    for sign in [-1, 1]:
+    fig.add_hline(y=0.333, line_dash='dot', line_color=MUTED,
+                  annotation_text='Hasard 33%', annotation_font_color=MUTED)
+    fig.update_layout(
+        **GL, title_text='Accuracy temps réel · rolling window 10',
+        yaxis=dict(tickformat='.0%', range=[0, 1],
+                   showgrid=True, gridcolor=GRID, zeroline=False),
+        xaxis=dict(title='Epoch #', showgrid=True, gridcolor=GRID, zeroline=False),
+        showlegend=False,
+    )
+    return fig
+
+
+def fig_prediction_timeline(pred_df: pd.DataFrame) -> go.Figure:
+    """Timeline des prédictions : true vs pred."""
+    df = pred_df.copy()
+    df["epoch_idx"] = range(len(df))
+
+    fig = go.Figure()
+    for cls in CLS_NAMES:
+        mask = df["true_label"] == cls
         fig.add_trace(go.Scatter(
-            x=sign * (1.05 + 0.06 * np.cos(theta)), y=0.12 * np.sin(theta),
-            mode="lines", line=dict(color=MUTED, width=2),
-            hoverinfo="skip",
+            x=df.loc[mask, "epoch_idx"],
+            y=[cls] * mask.sum(),
+            mode='markers', name=f'Vrai {cls}',
+            marker=dict(symbol='circle', size=10, color=CLS_COLORS[cls], opacity=0.5),
+            showlegend=True,
         ))
-    # Annotations textuelles : zones et orientation
-    fig.add_annotation(x=0, y=1.30, text="FRONT", showarrow=False,
-                       font=dict(color=MUTED, size=10, family="monospace"))
-    fig.add_annotation(x=0, y=-1.20, text="ARRIÈRE", showarrow=False,
-                       font=dict(color=MUTED, size=10, family="monospace"))
-    fig.add_annotation(x=-1.20, y=0, text="GAUCHE", showarrow=False,
-                       font=dict(color=MUTED, size=10, family="monospace"),
-                       textangle=-90)
-    fig.add_annotation(x=1.20, y=0, text="DROITE", showarrow=False,
-                       font=dict(color=MUTED, size=10, family="monospace"),
-                       textangle=90)
-
-
-_GRID_RES = 70                     # résolution du heatmap interpolé
-_GRID = np.linspace(-1.1, 1.1, _GRID_RES)
-_GRID_X, _GRID_Y = np.meshgrid(_GRID, _GRID)
-_CIRCLE_MASK = (_GRID_X**2 + _GRID_Y**2) <= 1.0   # n'affiche que l'intérieur du crâne
-
-
-def topomap_figure(
-    df_topo: pd.DataFrame, pred_label: str | None, epoch_id: int | None = None,
-) -> go.Figure:
-    fig = go.Figure()
-    if df_topo.empty:
-        fig.update_layout(
-            **PLOTLY_BASE,
-            title=dict(text="Topographie cérébrale · clique un bouton pour commencer",
-                       font=dict(size=14, color=INK,
-                                 family="Fraunces, Georgia, serif"), x=0.02),
-            height=500, uirevision="topomap_empty",
-            xaxis=dict(visible=False, range=[-1.35, 1.35]),
-            yaxis=dict(visible=False, range=[-1.35, 1.35], scaleanchor="x"),
-        )
-        _add_head_outline(fig)
-        return fig
-
-    df = df_topo.copy()
-    df["x"] = df["channel"].map(lambda c: POSITIONS.get(c, (np.nan, np.nan))[0])
-    df["y"] = df["channel"].map(lambda c: POSITIONS.get(c, (np.nan, np.nan))[1])
-    df = df.dropna(subset=["x", "y"])
-
-    # Z-score par canal contre la baseline T0 → indépendant des canaux marginaux
-    p_log = np.log10(df["alpha_power"].values + 1e-12)
-    means = df["channel"].map(BASELINE_MEAN).fillna(p_log.mean()).values
-    stds = df["channel"].map(BASELINE_STD).fillna(1.0).values
-    z = (p_log - means) / stds
-    z_clip = np.clip(z, -2.5, 2.5)
-    df["z"] = z_clip
-    df["is_highlight"] = df["channel"].isin(HIGHLIGHT_CHANNELS)
-
-    # ── 1. Interpolation continue (heatmap topographique) ───────────────
-    try:
-        grid_z = griddata(
-            points=df[["x", "y"]].values, values=df["z"].values,
-            xi=(_GRID_X, _GRID_Y), method="cubic", fill_value=0.0,
-        )
-        # masque circulaire : on ne montre que l'intérieur du crâne
-        grid_z = np.where(_CIRCLE_MASK, grid_z, np.nan)
-
-        fig.add_trace(go.Heatmap(
-            x=_GRID, y=_GRID, z=grid_z,
-            colorscale="RdBu_r", zmin=-2.5, zmax=2.5,
-            showscale=True,
-            colorbar=dict(
-                title=dict(text="α power<br>(Z-score)",
-                           font=dict(size=10, color=MUTED)),
-                tickfont=dict(color=MUTED, size=10),
-                tickvals=[-2.5, 0, 2.5],
-                ticktext=["BAS<br>activité (ERD)", "MOYENNE", "HAUT<br>repos"],
-                len=0.7, thickness=14, x=1.05,
-            ),
-            hoverinfo="skip",
-            zsmooth="best",
+        # prédictions correctes
+        corr = mask & (df["true_label"] == df["pred_label"])
+        fig.add_trace(go.Scatter(
+            x=df.loc[corr, "epoch_idx"],
+            y=[cls] * corr.sum(),
+            mode='markers', name=f'Prédit {cls}',
+            marker=dict(symbol='x', size=8, color=CLS_COLORS[cls], line=dict(width=1.5, color='black')),
+            showlegend=False,
         ))
-    except Exception as exc:
-        log.warning("Interpolation topomap failed: %s", exc)
-
-    # ── 2. Cercles de mise en évidence sur le motor cortex ──────────────
-    fig.add_trace(go.Scatter(
-        x=df[df["is_highlight"]]["x"], y=df[df["is_highlight"]]["y"],
-        mode="markers",
-        marker=dict(size=42, color="rgba(255,255,255,0.0)",
-                    line=dict(color=INK, width=2.5)),
-        hoverinfo="skip",
-    ))
-
-    # ── 3. Markers + labels des électrodes ──────────────────────────────
-    fig.add_trace(go.Scatter(
-        x=df["x"], y=df["y"], mode="markers+text",
-        marker=dict(
-            size=df["is_highlight"].map(lambda x: 16 if x else 9),
-            color=INK,
-            line=dict(color=PAPER, width=1.5),
-            opacity=0.7,
-        ),
-        text=df["channel"].map(
-            lambda c: f"<b>{c}</b>" if c in HIGHLIGHT_CHANNELS else c
-        ),
-        textfont=dict(
-            size=df["is_highlight"].map(lambda x: 11 if x else 6),
-            color=INK,
-        ),
-        textposition=df["is_highlight"].map(
-            lambda x: "top center" if x else "middle center"
-        ),
-        hovertemplate="<b>%{text}</b><br>z = %{customdata:.2f}<extra></extra>",
-        customdata=df["z"],
-    ))
-
-    _add_head_outline(fig)
-
-    title_text = "Topographie cérébrale · α power (8-13 Hz) — Z-score vs moyenne globale"
-    if pred_label:
-        title_text += f"<br><span style='font-size:12px;color:{CLASS_COLORS.get(pred_label, INK)}'>prédiction : <b>{CLASS_LABELS.get(pred_label, pred_label)}</b></span>"
-
-    # uirevision dépend de l'epoch → force le redraw quand un nouvel epoch arrive
-    uirev = f"topomap_{epoch_id}" if epoch_id is not None else "topomap"
 
     fig.update_layout(
-        **PLOTLY_BASE,
-        title=dict(text=title_text,
-                   font=dict(size=14, color=INK,
-                             family="Fraunces, Georgia, serif"), x=0.02),
-        height=500,
-        xaxis=dict(visible=False, range=[-1.35, 1.35]),
-        yaxis=dict(visible=False, range=[-1.35, 1.35], scaleanchor="x"),
-        uirevision=uirev,
+        **GL, title_text='Prédictions en direct — vrai (◦) vs prédit (✗)',
+        yaxis=dict(categoryorder='array', categoryarray=CLS_NAMES, showgrid=False),
+        xaxis=dict(title='Epoch #', showgrid=True, gridcolor=GRID, zeroline=False),
+        legend=dict(orientation='h', y=-0.18, bgcolor='rgba(0,0,0,0)'),
     )
     return fig
 
 
-def prediction_bars(df_pred: pd.DataFrame) -> go.Figure:
-    fig = go.Figure()
-    if df_pred.empty:
-        fig.update_layout(
-            **PLOTLY_BASE,
-            title=dict(text="Probabilités · clique un bouton pour commencer",
-                       font=dict(size=13, color=INK,
-                                 family="Fraunces, Georgia, serif"), x=0.02),
-            height=440, uirevision="bars",
-        )
-        return fig
+def fig_confusion_live(pred_df: pd.DataFrame) -> go.Figure:
+    """Matrice de confusion temps réel."""
+    df = pred_df.copy()
+    matrix = pd.crosstab(df['true_label'], df['pred_label']) \
+               .reindex(index=CLS_NAMES, columns=CLS_NAMES, fill_value=0)
+    pct = (matrix.values / matrix.values.sum(axis=1, keepdims=True) * 100).round(1)
+    text = [[f'<b>{matrix.values[i,j]}</b><br><span style="font-size:10px;opacity:0.75">{pct[i,j]}%</span>'
+             for j in range(3)] for i in range(3)]
 
-    last = df_pred.iloc[-1]
-    probas = [last.get(f"proba_{k}", 0) for k in ["T0", "T1", "T2"]]
-    pred = last.get("pred_label", "?")
-    true = last.get("true_label", "?")
-
-    fig.add_trace(go.Bar(
-        x=[CLASS_LABELS[k] for k in ["T0", "T1", "T2"]],
-        y=probas,
-        marker=dict(color=[CLASS_COLORS[k] for k in ["T0", "T1", "T2"]],
-                    line=dict(color=PAPER, width=2)),
-        text=[f"{p*100:.0f}%" for p in probas],
-        textposition="outside",
-        textfont=dict(color=INK, size=13, family="Fraunces, Georgia, serif"),
-        hovertemplate="%{x}<br>%{y:.2%}<extra></extra>",
+    fig = go.Figure(go.Heatmap(
+        z=matrix.values,
+        x=['T0 prédit','T1 prédit','T2 prédit'],
+        y=['T0 réel','T1 réel','T2 réel'],
+        colorscale=[[0, '#f0eadf'], [0.5, '#e9a87c'], [1, CORAIL]],
+        text=text, texttemplate='%{text}',
+        textfont=dict(color=INK, size=14, family='Fraunces, serif'),
+        showscale=False,
+        hovertemplate='<b>%{y} → %{x}</b><br>%{z} epochs<extra></extra>',
     ))
-    correct_mark = " ✓" if pred == true else " ✗"
-    title = f"Prédiction : {CLASS_LABELS.get(pred, pred)}{correct_mark}"
     fig.update_layout(
-        **PLOTLY_BASE,
-        title=dict(text=title, font=dict(size=14, color=INK,
-                                          family="Fraunces, Georgia, serif"),
-                   x=0.02),
-        yaxis=dict(range=[0, 1.15], gridcolor=GRID, tickformat=".0%",
-                   tickfont=dict(color=MUTED)),
-        xaxis=dict(tickfont=dict(color=MUTED, size=11)),
-        height=440, uirevision="bars",
+        **GL, title_text='Matrice de confusion · live',
+        xaxis=dict(side='bottom'),
+        yaxis=dict(autorange='reversed'),
     )
     return fig
 
 
-def timeline_figure(df_pred: pd.DataFrame) -> go.Figure:
-    """Moniteur temps réel : chaque epoch = une barre colorée placée dans le
-    temps (event_time). Style moniteur hôpital — on voit le flux défiler.
-    """
-    fig = go.Figure()
-    if df_pred.empty or "event_time" not in df_pred.columns:
-        fig.update_layout(
-            **PLOTLY_BASE,
-            title=dict(text="Moniteur temps réel · en attente du flux…",
-                       font=dict(size=13, color=INK,
-                                 family="Fraunces, Georgia, serif"), x=0.02),
-            height=170, uirevision="timeline",
-        )
+def fig_topomap(topo_df: pd.DataFrame, band: str = 'alpha') -> go.Figure:
+    """Topomap alpha en direct à partir des dernières données."""
+    if topo_df.empty:
+        fig = go.Figure()
+        fig.update_layout(**GL, title_text='Topomap — en attente de données...')
         return fig
 
-    df = df_pred.tail(40).copy()
-    for cls in ["T0", "T1", "T2"]:
-        sub = df[df["pred_label"] == cls]
-        if sub.empty:
+    # Construire un vecteur de puissance par canal
+    ch_power = {}
+    for _, row in topo_df.iterrows():
+        ch_power[row['channel'].upper()] = row['alpha_power']
+
+    powers = np.array([ch_power.get(ch, np.nan) for ch in CH_NAMES])
+
+    grid_n = 100
+    gx = np.linspace(-MAX_R, MAX_R, grid_n)
+    gy = np.linspace(-MAX_R, MAX_R, grid_n)
+    GX, GY = np.meshgrid(gx, gy)
+
+    sigma = 0.25
+    Z = np.zeros_like(GX)
+    W = np.zeros_like(GX)
+    for i in range(len(CH_NAMES)):
+        if np.isnan(powers[i]):
             continue
-        fig.add_trace(go.Bar(
-            x=sub["event_time"], y=[1] * len(sub),
-            marker=dict(color=CLASS_COLORS[cls],
-                        line=dict(color=PAPER, width=1)),
-            name=CLASS_LABELS[cls], width=1500,  # ms
-            hovertemplate=f"<b>{CLASS_LABELS[cls]}</b><br>%{{x|%H:%M:%S}}<extra></extra>",
-        ))
+        d2 = (GX - CH_X2D[i]) ** 2 + (GY - CH_Y2D[i]) ** 2
+        w = np.exp(-d2 / (2 * sigma ** 2))
+        Z += w * powers[i]
+        W += w
+    Z = np.where(W > 1e-9, Z / W, np.nan)
 
-    layout = {k: v for k, v in PLOTLY_BASE.items()
-              if k not in {"showlegend", "margin"}}
-    fig.update_layout(
-        **layout,
-        showlegend=True,
-        legend=dict(orientation="h", y=-0.35, x=0, font=dict(size=10, color=TX)),
-        margin=dict(l=24, r=24, t=46, b=58),
-        title=dict(
-            text="Moniteur temps réel · flux des prédictions (chaque barre = 1 epoch)",
-            font=dict(size=13, color=INK, family="Fraunces, Georgia, serif"),
-            x=0.02, y=0.95,
+    mask = (GX ** 2 + GY ** 2) > (MAX_R * 0.92) ** 2
+    Z = np.where(mask, np.nan, Z)
+
+    vmin = float(np.nanmin(Z)) if not np.all(np.isnan(Z)) else 0
+    vmax = float(np.nanmax(Z)) if not np.all(np.isnan(Z)) else 1
+    if vmax - vmin < 1e-9:
+        vmin -= 0.1
+        vmax += 0.1
+
+    true_label = topo_df['true_label'].iloc[0] if 'true_label' in topo_df.columns else '?'
+    pred_label = topo_df['pred_label'].iloc[0] if 'pred_label' in topo_df.columns else '?'
+
+    fig = go.Figure()
+    fig.add_trace(go.Contour(
+        x=gx, y=gy, z=Z,
+        colorscale=WARM_BRAIN,
+        zmin=vmin, zmax=vmax,
+        contours=dict(showlines=True, coloring='fill',
+                      start=vmin, end=vmax,
+                      size=(vmax - vmin) / 18),
+        line=dict(width=0.5, color='rgba(43,42,38,0.10)'),
+        colorbar=dict(
+            title=dict(text='Puissance α', font=dict(color=TX, size=11, family='Inter')),
+            tickfont=dict(color=TX, size=10, family='Inter'),
+            thickness=10, len=0.7, x=1.02,
+            outlinewidth=0, bgcolor='rgba(0,0,0,0)',
         ),
-        barmode="overlay",
-        yaxis=dict(visible=False, range=[0, 1.2]),
-        xaxis=dict(gridcolor=GRID, tickfont=dict(color=MUTED)),
-        height=200, uirevision="timeline",
+        hovertemplate='Puissance : %{z:.2e}<extra></extra>',
+    ))
+
+    # Contour tête
+    theta = np.linspace(0, 2 * np.pi, 160)
+    head_r = MAX_R * 0.92
+    fig.add_trace(go.Scatter(
+        x=head_r * np.cos(theta), y=head_r * np.sin(theta),
+        mode='lines', line=dict(color=INK, width=2.2),
+        hoverinfo='skip', showlegend=False,
+    ))
+    # Nez
+    nose_x = [-0.04, 0, 0.04]
+    nose_y = [head_r * 0.98, head_r * 1.10, head_r * 0.98]
+    fig.add_trace(go.Scatter(
+        x=nose_x, y=nose_y, mode='lines',
+        line=dict(color=INK, width=2.2),
+        hoverinfo='skip', showlegend=False,
+    ))
+
+    motor_mask = np.array([n in ('C3', 'CZ', 'C4') for n in CH_NAMES])
+    fig.add_trace(go.Scatter(
+        x=CH_X2D[~motor_mask], y=CH_Y2D[~motor_mask],
+        mode='markers',
+        marker=dict(size=4.5, color='rgba(43,42,38,0.45)',
+                    line=dict(color='rgba(251,248,242,0.95)', width=0.7)),
+        text=[CH_NAMES[i] for i in range(len(CH_NAMES)) if not motor_mask[i]],
+        hovertemplate='<b>%{text}</b> (interpolé)<extra></extra>',
+        showlegend=False,
+    ))
+    fig.add_trace(go.Scatter(
+        x=CH_X2D[motor_mask], y=CH_Y2D[motor_mask],
+        mode='markers+text',
+        marker=dict(size=12, color=PAPER, line=dict(color=CORAIL, width=2.2)),
+        text=[CH_NAMES[i] for i in range(len(CH_NAMES)) if motor_mask[i]],
+        textposition='top center',
+        textfont=dict(color=CORAIL, size=11, family='Fraunces, serif'),
+        showlegend=False,
+    ))
+
+    fig.update_layout(
+        **GL,
+        title_text=f'Topographie corticale α · Vrai: {true_label} · Prédit: {pred_label}',
+        xaxis=dict(visible=False, range=[-MAX_R * 1.18, MAX_R * 1.18],
+                   scaleanchor='y', scaleratio=1),
+        yaxis=dict(visible=False, range=[-MAX_R * 1.18, MAX_R * 1.18]),
+        autosize=True,
     )
     return fig
-
-
-# ── Cards & UI ───────────────────────────────────────────────────────────────
-CARD_STYLE = {
-    "padding": "18px 22px", "background": PAPER,
-    "border": f"1px solid {BORD}", "borderRadius": "18px",
-    "boxShadow": "0 1px 3px rgba(60,50,40,0.04), 0 2px 12px rgba(60,50,40,0.03)",
-    "flex": "1", "minWidth": "160px",
-}
-
-
-def big_button(label: str, icon: str, color: str, btn_id: str,
-               description: str) -> html.Button:
-    return html.Button(
-        children=[
-            html.Div(icon, style={"fontSize": "30px", "marginBottom": "6px"}),
-            html.Div(label, style={
-                "fontSize": "15px", "fontWeight": "600",
-                "fontFamily": "Fraunces, Georgia, serif",
-            }),
-            html.Div(description, style={
-                "fontSize": "10.5px", "color": MUTED, "marginTop": "4px",
-                "lineHeight": "1.3",
-            }),
-        ],
-        id=btn_id, n_clicks=0,
-        style={
-            "padding": "18px 16px", "background": PAPER,
-            "border": f"2px solid {color}", "borderRadius": "16px",
-            "color": color, "cursor": "pointer", "minWidth": "180px",
-            "flex": "1", "transition": "all 200ms cubic-bezier(0.4, 0, 0.2, 1)",
-        },
-    )
-
-
-def update_live_metrics(df_pred: pd.DataFrame) -> None:
-    """Met à jour les métriques globales : latence vraie (mtime du fichier
-    Spark - send time) + débit observé."""
-    if df_pred.empty or "epoch_id" not in df_pred.columns:
-        return
-    now = time.time()
-
-    # Latence : on prend le mtime du dernier fichier prédiction écrit par Spark
-    # = moment où Spark a vraiment fini ce batch
-    if PRED_DIR.exists():
-        files = sorted(PRED_DIR.glob("*.parquet"),
-                       key=lambda f: f.stat().st_mtime)
-        if files:
-            latest_mtime = files[-1].stat().st_mtime
-            max_eid = int(df_pred["epoch_id"].max())
-            send_t = _send_times.get(max_eid)
-            if send_t is not None:
-                lat = latest_mtime - send_t
-                if 0 < lat < 30:   # filtre les valeurs aberrantes
-                    prev = _metrics["latency"]
-                    _metrics["latency"] = (
-                        lat if prev is None else 0.4 * prev + 0.6 * lat
-                    )
-    # purge les send_times anciens pour ne pas accumuler de la mémoire
-    for eid in list(_send_times.keys()):
-        if now - _send_times[eid] > 60:
-            _send_times.pop(eid, None)
-
-    # Débit : nombre d'epochs / temps de session
-    start = _metrics["session_start"]
-    if start is not None:
-        elapsed = max(now - start, 1.0)
-        _metrics["throughput"] = len(df_pred) / elapsed
-
-
-def metrics_panel() -> html.Div:
-    """Affiche les 4 métriques clés du streaming, façon dashboard ops."""
-    def chip(icon: str, label: str, value: str, color: str = INK) -> html.Div:
-        return html.Div([
-            html.Div([
-                html.Span(icon, style={"fontSize": "15px", "marginRight": "6px"}),
-                html.Span(label, style={
-                    "color": MUTED, "fontSize": "10px",
-                    "letterSpacing": "0.08em", "textTransform": "uppercase",
-                    "fontWeight": "600",
-                }),
-            ], style={"marginBottom": "4px", "display": "flex", "alignItems": "center"}),
-            html.Div(value, style={
-                "color": color, "fontSize": "20px", "fontWeight": "600",
-                "fontFamily": "Fraunces, Georgia, serif", "lineHeight": "1",
-            }),
-        ], style={
-            "padding": "10px 14px", "background": PAPER,
-            "border": f"1px solid {BORD}", "borderRadius": "12px",
-            "flex": "1", "minWidth": "130px",
-        })
-
-    lat = _metrics["latency"]
-    thr = _metrics["throughput"]
-    batch = _metrics["batch_kb"]
-    return html.Div([
-        chip("⏱️", "Latence",
-             f"{lat:.2f} s" if lat is not None else "— s",
-             color=COLOR_T2),
-        chip("🚀", "Débit",
-             f"{thr:.2f} epoch/s" if thr is not None else "— epoch/s",
-             color=COLOR_T1),
-        chip("📦", "Taille paquet",
-             f"{batch:.0f} Ko" if batch is not None else "— Ko"),
-        chip("🔢", "Signaux traités",
-             f"{int(EPOCH_COUNTER['value'])}"),
-    ], style={"display": "flex", "gap": "10px", "flexWrap": "wrap"})
-
-
-def hint_panel(last_label: str | None) -> html.Div:
-    if last_label is None:
-        return html.Div([
-            html.Div("👈  Choisis un epoch à envoyer", style={
-                "fontSize": "14px", "color": INK, "fontWeight": "500",
-                "marginBottom": "6px",
-            }),
-            html.Div(
-                "Le dashboard est en mode interactif. Clique sur un des trois "
-                "boutons ci-dessus pour envoyer un epoch de ce type au pipeline "
-                "Spark. Tu verras la prédiction et la topographie cérébrale.",
-                style={"color": MUTED, "fontSize": "12px", "lineHeight": "1.5"},
-            ),
-        ], style={**CARD_STYLE, "padding": "16px"})
-
-    hint = CLASS_HINTS[last_label]
-    color = CLASS_COLORS[last_label]
-    return html.Div([
-        html.Div([
-            html.Span("Ce que tu dois voir : ", style={
-                "color": MUTED, "fontSize": "11px",
-                "letterSpacing": "0.08em", "textTransform": "uppercase",
-                "fontWeight": "500",
-            }),
-            html.Span(CLASS_LABELS[last_label], style={
-                "color": color, "fontSize": "13px", "fontWeight": "600",
-                "marginLeft": "8px",
-            }),
-        ], style={"marginBottom": "8px"}),
-        html.Div(dcc.Markdown(hint, link_target="_blank"),
-                 style={"color": INK, "fontSize": "13px", "lineHeight": "1.5"}),
-    ], style={**CARD_STYLE, "padding": "16px",
-              "borderLeft": f"4px solid {color}"})
 
 
 # ── App Dash ─────────────────────────────────────────────────────────────────
-EXTERNAL_FONTS = [
-    "https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap",
-]
-app = Dash(__name__, title="NeuroSpark · EEG BCI Live",
-           external_stylesheets=EXTERNAL_FONTS, update_title=None)
+app = dash.Dash(__name__, title='EEG · Streaming Live')
+
+app.index_string = '''<!DOCTYPE html>
+<html>
+<head>
+    {%metas%}
+    <title>{%title%}</title>
+    {%css%}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>{%app_entry%}<footer>{%config%}{%scripts%}{%renderer%}</footer></body>
+</html>'''
+
+GRAPH_CFG = {'displayModeBar': False, 'responsive': True}
+GRAPH_STYLE = {'height': '420px', 'width': '100%'}
+GRAPH_STYLE_LG = {'height': '540px', 'width': '100%'}
 
 app.layout = html.Div([
     # Header
     html.Div([
         html.Div([
-            html.Div(style={
-                "width": "10px", "height": "10px", "borderRadius": "50%",
-                "background": COLOR_T2,
-                "boxShadow": "0 0 0 4px rgba(196,69,54,0.20)",
-                "marginRight": "10px",
-                "animation": "pulse 1.6s ease-in-out infinite",
-            }),
-            html.Span("LIVE BCI · Mode interactif", style={
-                "color": COLOR_T2, "fontSize": "11px", "fontWeight": "700",
-                "letterSpacing": "0.18em",
-            }),
-        ], style={"display": "flex", "alignItems": "center"}),
-        html.H1("NeuroSpark · Brain-Computer Interface", style={
-            "margin": "8px 0 6px 0", "fontFamily": "Fraunces, Georgia, serif",
-            "color": INK, "fontSize": "30px", "fontWeight": "600",
-        }),
-        html.Div(
-            "Clique sur un bouton pour envoyer un epoch EEG dans Spark. "
-            "Le modèle prédira la classe et la topographie cérébrale "
-            "montrera l'activité alpha sur les 64 électrodes.",
-            style={"color": TX, "fontSize": "13px", "maxWidth": "820px",
-                   "lineHeight": "1.5"},
-        ),
-        # Sélecteur de sujet
+            html.Div('eeg', className='ns-logo-icon'),
+            html.Div([
+                html.H1('Motor Imagery · Live', className='ns-title'),
+                html.P('Streaming Spark distribué · applyInPandas · Scikit-Learn',
+                       className='ns-sub'),
+            ]),
+        ], className='ns-logo'),
         html.Div([
-            html.Span("Sujet testé : ", style={
-                "color": MUTED, "fontSize": "12px", "fontWeight": "600",
-                "marginRight": "8px",
-            }),
-            dcc.Dropdown(
-                id="subject-select",
-                options=[{"label": s, "value": s} for s in SUBJECTS],
-                value=DEFAULT_SUBJECT,
-                clearable=False,
-                style={"width": "180px", "fontSize": "13px"},
-            ),
-        ], style={"display": "flex", "alignItems": "center", "marginTop": "12px"}),
-    ], style={"padding": "28px 32px 12px 32px"}),
+            html.Span(className='ns-dot', style={'backgroundColor': SAUGE}),
+            html.Span('Streaming actif'),
+        ], className='ns-live'),
+    ], className='ns-header'),
 
-    # Boutons interactifs
+    # Hero
     html.Div([
-        big_button("Repos", "🧘", COLOR_T0, "btn-T0",
-                   "Le sujet ne fait rien. Alpha élevé attendu."),
-        big_button("Mouvement réel", "✋", COLOR_T1, "btn-T1",
-                   "Le sujet bouge sa main. Alpha bas sur C3/C4."),
-        big_button("Mouvement imaginé", "🧠", COLOR_T2, "btn-T2",
-                   "Le sujet imagine bouger. ERD attendu sur cortex moteur."),
-    ], style={"display": "flex", "gap": "12px",
-              "padding": "12px 32px 0 32px"}),
+        html.H2(['Classification temps réel ', html.Em('sur le stream Spark.')]),
+        html.P('Prédictions distribuées via applyInPandas. Mise à jour toutes les 2 secondes. '
+               'Anti memory-leak : lecture limitée aux derniers fichiers Parquet.'),
+    ], className='hero'),
 
-    # Panneau métriques live (latence / débit / taille / count)
-    html.Div(id="metrics-panel", style={"padding": "16px 32px 0 32px"}),
+    # KPI row (live)
+    html.Div(id='kpi-row', className='kpi-row'),
 
-    # Animation pipeline (s'allume étape par étape quand un epoch est envoyé)
-    html.Div(id="pipeline-anim", style={"padding": "16px 32px 0 32px"}),
-
-    # Toggle flux continu + statut
+    # Row 1
     html.Div([
         html.Div([
-            dcc.Checklist(
-                id="auto-toggle",
-                options=[{"label": "  ▶ Démarrer le flux continu (1 epoch / 3 s, simule un sujet réel)",
-                          "value": "auto"}],
-                value=[],
-                inputStyle={"marginRight": "6px"},
-                style={"color": INK, "fontSize": "13px", "fontWeight": "500"},
-            ),
-            html.Div(
-                "Active ce mode pour alimenter le moniteur temps réel et la "
-                "fenêtre glissante Spark ci-dessous — c'est le vrai streaming continu.",
-                style={"color": MUTED, "fontSize": "11.5px", "marginTop": "2px",
-                       "marginLeft": "22px"},
-            ),
-        ], style={"marginBottom": "10px"}),
+            html.Div('Précision en direct', className='card-title'),
+            html.Div('Accuracy glissante rolling window 10', className='card-sub'),
+            dcc.Loading(dcc.Graph(id='acc-graph', config=GRAPH_CFG, style=GRAPH_STYLE),
+                        type='circle', color=CORAIL),
+        ], className='card'),
+        html.Div([
+            html.Div('Matrice de confusion', className='card-title'),
+            html.Div('Live — s\'enrichit à chaque époque', className='card-sub'),
+            dcc.Loading(dcc.Graph(id='conf-graph', config=GRAPH_CFG, style=GRAPH_STYLE),
+                        type='circle', color=CORAIL),
+        ], className='card'),
+    ], className='grid-2'),
 
-        html.Div(id="status", children="", style={
-            "color": MUTED, "fontSize": "12px", "marginTop": "12px",
-            "fontFamily": "monospace",
-        }),
-    ], style={"padding": "16px 32px 0 32px"}),
-
-    html.Div(id="hint-panel", style={"padding": "16px 32px 0 32px"}),
-
-    # Topomap + Bars/Accuracy
+    # Row 2 — Timeline
     html.Div([
         html.Div([
-            dcc.Graph(id="topomap",
-                      config={"displayModeBar": False},
-                      style={"height": "500px"}),
-        ], style={**CARD_STYLE, "flex": 2, "padding": "12px"}),
-        html.Div([
-            dcc.Graph(id="pred-bars",
-                      config={"displayModeBar": False},
-                      style={"height": "440px"}),
-        ], style={**CARD_STYLE, "flex": 1, "padding": "12px"}),
-    ], style={"display": "flex", "gap": "12px",
-              "padding": "20px 32px 0 32px"}),
+            html.Div('Timeline des prédictions', className='card-title'),
+            html.Div('Vrai (◦) vs Prédit (✗) — chaque point est une époque', className='card-sub'),
+            dcc.Loading(dcc.Graph(id='timeline-graph', config=GRAPH_CFG, style=GRAPH_STYLE_LG),
+                        type='circle', color=CORAIL),
+        ], className='card'),
+    ], className='grid-full'),
 
-    # Moniteur temps réel (timeline du flux des prédictions)
+    # Row 3 — Topomap
     html.Div([
         html.Div([
-            dcc.Graph(id="timeline",
-                      config={"displayModeBar": False},
-                      style={"height": "200px"}),
-        ], style={**CARD_STYLE, "padding": "12px"}),
-    ], style={"padding": "12px 32px 32px 32px"}),
+            html.Div('Topographie corticale α en direct', className='card-title'),
+            html.Div('Interpolation spatiale à partir des électrodes motrices C3, Cz, C4',
+                     className='card-sub'),
+            dcc.Loading(dcc.Graph(id='topo-graph', config=GRAPH_CFG, style=GRAPH_STYLE_LG),
+                        type='circle', color=CORAIL),
+        ], className='card'),
+    ], className='grid-full'),
 
-    dcc.Store(id="last-label", data=None),
-    dcc.Store(id="pipeline-start", data=None),  # timestamp ms du dernier clic
-    dcc.Interval(id="tick", interval=REFRESH_MS, n_intervals=0),
-    dcc.Interval(id="auto-tick", interval=3000, n_intervals=0),
-    dcc.Interval(id="anim-tick", interval=300, n_intervals=0),
+    dcc.Interval(id='live-interval', interval=2000, n_intervals=0),
 
-    html.Footer([
-        html.Span("NeuroSpark BCI", style={"fontWeight": 600}),
-        html.Span(" · UE28 Big Data · 2026", style={"color": MUTED}),
-    ], style={"padding": "14px 32px 30px 32px", "color": TX,
-              "fontSize": "11px", "textAlign": "center",
-              "fontFamily": "monospace"}),
-], style={"background": BG, "minHeight": "100vh",
-          "fontFamily": "Inter, system-ui, sans-serif", "color": INK})
+    # Hidden div for last known state
+    html.Div(id='last-state', style={'display': 'none'}),
 
-
-app.index_string = """
-<!DOCTYPE html>
-<html>
-    <head>
-        {%metas%}
-        <title>{%title%}</title>
-        {%favicon%}
-        {%css%}
-        <style>
-            @keyframes pulse {
-                0%, 100% { transform: scale(1); opacity: 1; }
-                50%      { transform: scale(1.15); opacity: 0.85; }
-            }
-            button:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 16px rgba(60,50,40,0.10);
-            }
-            button:active { transform: translateY(0); }
-            ::-webkit-scrollbar { width: 8px; }
-            ::-webkit-scrollbar-track { background: #f5f1e8; }
-            ::-webkit-scrollbar-thumb { background: #c9bfae; border-radius: 4px; }
-            body { margin: 0; }
-        </style>
-    </head>
-    <body>
-        {%app_entry%}
-        <footer>
-            {%config%}
-            {%scripts%}
-            {%renderer%}
-        </footer>
-    </body>
-</html>
-"""
-
-
-AUTO_ROTATION = ["T0", "T1", "T2", "T0", "T2", "T1"]   # séquence cyclique
-
-# Animation pipeline : 5 étapes, chacune dure ~500 ms
-PIPELINE_STEPS = [
-    ("📥", "Epoch envoyé", "Dashboard écrit un Parquet dans data/stream_eeg/input/"),
-    ("🔍", "Spark detect", "readStream voit le nouveau fichier (file source)"),
-    ("📊", "FFT extraction", "Calcul des band powers theta/alpha/beta/gamma sur C3/Cz/C4"),
-    ("🤖", "ML predict", "sklearn RandomForest classifie : T0 / T1 / T2"),
-    ("💾", "Sink Parquet", "Résultat écrit + dashboard rafraîchit en 1.5 s"),
-]
-STEP_DURATION_MS = 500   # chaque étape dure 500 ms (5 étapes = 2.5 s total)
-
-
-def pipeline_animation(start_ts: int | None) -> html.Div:
-    """5 boîtes alignées qui s'allument une après l'autre après un clic."""
-    if start_ts is None:
-        elapsed_ms = -1
-    else:
-        elapsed_ms = int(time.time() * 1000) - start_ts
-
-    current_step = elapsed_ms // STEP_DURATION_MS if elapsed_ms >= 0 else -1
-    is_idle = current_step >= len(PIPELINE_STEPS) or current_step < 0
-
-    boxes = []
-    for i, (icon, title, desc) in enumerate(PIPELINE_STEPS):
-        if is_idle:
-            bg, border, color = PAPER, BORD, MUTED
-            icon_opacity = 0.4
-        elif i < current_step:
-            bg, border, color = "rgba(122,155,118,0.10)", "#7a9b76", "#5a7556"
-            icon_opacity = 1.0
-        elif i == current_step:
-            bg, border, color = "rgba(217,164,65,0.18)", "#d9a441", "#a87520"
-            icon_opacity = 1.0
-        else:
-            bg, border, color = PAPER, BORD, MUTED
-            icon_opacity = 0.4
-
-        boxes.append(html.Div([
-            html.Div(icon, style={
-                "fontSize": "22px", "marginBottom": "4px",
-                "opacity": icon_opacity,
-                "transition": "all 300ms cubic-bezier(0.4, 0, 0.2, 1)",
-            }),
-            html.Div(title, style={
-                "color": color, "fontSize": "11px", "fontWeight": "600",
-                "fontFamily": "Fraunces, Georgia, serif",
-            }),
-            html.Div(desc, style={
-                "color": MUTED, "fontSize": "9.5px", "marginTop": "2px",
-                "lineHeight": "1.3", "minHeight": "26px",
-            }),
-        ], style={
-            "padding": "10px 12px", "background": bg,
-            "border": f"1.5px solid {border}", "borderRadius": "12px",
-            "flex": "1", "textAlign": "center",
-            "transition": "all 300ms cubic-bezier(0.4, 0, 0.2, 1)",
-        }))
-
-        # connecteur entre étapes (sauf après la dernière)
-        if i < len(PIPELINE_STEPS) - 1:
-            arrow_color = "#7a9b76" if i < current_step and not is_idle else BORD
-            boxes.append(html.Div("→", style={
-                "color": arrow_color, "fontSize": "16px",
-                "alignSelf": "center", "padding": "0 4px",
-                "transition": "all 300ms",
-            }))
-
-    label_strip = html.Div([
-        html.Span("PIPELINE STREAMING ", style={
-            "color": MUTED, "fontSize": "10px", "fontWeight": "600",
-            "letterSpacing": "0.12em",
-        }),
-        html.Span(
-            "· idle" if is_idle else f"· étape {current_step + 1}/{len(PIPELINE_STEPS)}",
-            style={"color": COLOR_T2 if not is_idle else MUTED, "fontSize": "10px",
-                   "fontFamily": "monospace"},
-        ),
-    ], style={"marginBottom": "8px"})
-
-    return html.Div([
-        label_strip,
-        html.Div(boxes, style={"display": "flex", "alignItems": "stretch"}),
-    ])
+], style={'backgroundColor': BG, 'minHeight': '100vh'})
 
 
 # ── Callbacks ────────────────────────────────────────────────────────────────
 @app.callback(
-    Output("status", "children"),
-    Output("last-label", "data"),
-    Output("pipeline-start", "data"),
-    Input("btn-T0", "n_clicks"),
-    Input("btn-T1", "n_clicks"),
-    Input("btn-T2", "n_clicks"),
-    Input("auto-tick", "n_intervals"),
-    State("auto-toggle", "value"),
-    State("last-label", "data"),
-    State("subject-select", "value"),
-    prevent_initial_call=True,
+    Output('kpi-row', 'children'),
+    Output('acc-graph', 'figure'),
+    Output('conf-graph', 'figure'),
+    Output('timeline-graph', 'figure'),
+    Output('topo-graph', 'figure'),
+    Input('live-interval', 'n_intervals'),
 )
-def on_trigger(_n0, _n1, _n2, auto_n, auto_value, current, subject):
-    ctx = callback_context
-    subject = subject or DEFAULT_SUBJECT
-    if not ctx.triggered:
-        return "", current, None
-    trig = ctx.triggered[0]["prop_id"].split(".")[0]
+def refresh_all(_n):
+    pred_df = load_predictions()
+    topo_df, topo_epoch_id = load_topomap()
 
-    # Flux continu (mode auto)
-    if trig == "auto-tick":
-        if auto_value and "auto" in auto_value:
-            label = AUTO_ROTATION[auto_n % len(AUTO_ROTATION)]
-            msg = _send_epoch(label, subject)
-            return f"[FLUX] {msg}", label, int(time.time() * 1000)
-        return "", current, None
+    if pred_df.empty:
+        empty = go.Figure()
+        empty.update_layout(**GL, title_text='En attente du stream...')
+        kpis = html.Div('Aucune donnée reçue. Lance kedro run --pipeline streaming_eeg.')
+        return kpis, empty, empty, empty, empty
 
-    # Bouton manuel T0/T1/T2
-    label = trig.replace("btn-", "")
-    msg = _send_epoch(label, subject)
-    return f"→ {msg} · suis le pipeline ci-dessous", label, int(time.time() * 1000)
+    n_epochs = len(pred_df)
+    n_correct = int(pred_df['correct'].sum())
+    accuracy = n_correct / n_epochs if n_epochs > 0 else 0.0
+    n_classes = pred_df['true_label'].nunique()
+
+    def kpi(label, value, sub, color):
+        return html.Div([
+            html.Div(label, className='kpi-label'),
+            html.Div(value, className='kpi-val', style={'color': color}),
+            html.Div(sub, className='kpi-sub'),
+            html.Div(className='kpi-bar', style={'background': color}),
+        ], className='kpi-card')
+
+    kpis = html.Div([
+        kpi('Accuracy', f'{accuracy:.1%}',
+            f'{n_correct}/{n_epochs} corrects · rolling 10', OCEAN),
+        kpi('Époques', f'{n_epochs}',
+            f'{n_classes} classes détectées', CORAIL),
+        kpi('Dernière époque', str(topo_epoch_id or '—'),
+            'ID du dernier batch reçu', SAUGE),
+    ], className='kpi-row')
+
+    return (kpis,
+            fig_live_accuracy(pred_df),
+            fig_confusion_live(pred_df),
+            fig_prediction_timeline(pred_df),
+            fig_topomap(topo_df))
 
 
-@app.callback(
-    Output("pipeline-anim", "children"),
-    Input("anim-tick", "n_intervals"),
-    State("pipeline-start", "data"),
+# ── CSS maison ───────────────────────────────────────────────────────────────
+app.index_string = app.index_string.replace(
+    '</head>',
+    '''<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#f7f3ec;font-family:Inter,system-ui,sans-serif;color:#3d3a33;line-height:1.5}
+.ns-header{display:flex;justify-content:space-between;align-items:center;
+  padding:20px 36px;border-bottom:1px solid rgba(60,50,40,0.10)}
+.ns-logo{display:flex;align-items:center;gap:16px}
+.ns-logo-icon{background:#2b2a26;color:#fbf8f2;width:44px;height:44px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;
+  letter-spacing:0.05em;font-family:Fraunces,Georgia,serif}
+.ns-title{font-family:Fraunces,Georgia,serif;font-size:20px;font-weight:600;color:#2b2a26}
+.ns-sub{font-size:13px;color:#8a8276;margin-top:1px}
+.ns-live{display:flex;align-items:center;gap:8px;font-size:13px;color:#7a9b76;font-weight:500}
+.ns-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.hero{padding:28px 36px 8px 36px}
+.hero h2{font-family:Fraunces,Georgia,serif;font-size:26px;font-weight:500;color:#2b2a26}
+.hero em{color:#e07a5f;font-style:italic}
+.hero p{font-size:14px;color:#8a8276;margin-top:6px;max-width:700px}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:14px;padding:16px 36px}
+.kpi-card{background:#fbf8f2;border-radius:16px;padding:18px 20px 16px;
+  border:1px solid rgba(60,50,40,0.06);position:relative;overflow:hidden}
+.kpi-label{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;
+  font-weight:600;color:#8a8276;margin-bottom:4px}
+.kpi-val{font-family:Fraunces,Georgia,serif;font-size:30px;font-weight:600;line-height:1.1}
+.kpi-sub{font-size:12px;color:#8a8276;margin-top:4px}
+.kpi-bar{position:absolute;bottom:0;left:0;right:0;height:3px;opacity:0.3}
+.grid-2,.grid-full{padding:8px 36px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-full{display:grid;grid-template-columns:1fr}
+.card{background:#fbf8f2;border-radius:20px;padding:22px 24px;
+  border:1px solid rgba(60,50,40,0.06)}
+.card-title{font-family:Fraunces,Georgia,serif;font-size:16px;font-weight:500;color:#2b2a26}
+.card-sub{font-size:12px;color:#8a8276;margin:3px 0 14px 0}
+.footer{text-align:center;padding:28px;font-size:12px;color:#8a8276}
+.sep{margin:0 10px;opacity:0.4}
+</style></head>'''
 )
-def refresh_pipeline_anim(_n, start_ts):
-    return pipeline_animation(start_ts)
 
 
-@app.callback(
-    Output("status", "children", allow_duplicate=True),
-    Output("last-label", "data", allow_duplicate=True),
-    Input("subject-select", "value"),
-    prevent_initial_call=True,
-)
-def on_subject_change(subject):
-    """Au changement de sujet : efface les sorties affichées et remet
-    le compteur + les métriques à zéro. Page blanche.
-    """
-    for d in (PRED_DIR, TOPO_DIR):
-        if d.exists():
-            for f in d.glob("*.parquet"):
-                try:
-                    f.unlink()
-                except OSError:
-                    pass
-    EPOCH_COUNTER["value"] = 0
-    _send_times.clear()
-    _metrics.update({"latency": None, "throughput": None,
-                     "batch_kb": None, "session_start": None})
-    log.info("Sujet → %s : reset complet", subject)
-    return (
-        f"→ Sujet changé : {subject}. Page réinitialisée, prêt pour un nouveau test.",
-        None,
-    )
-
-
-@app.callback(
-    Output("topomap", "figure"),
-    Output("pred-bars", "figure"),
-    Output("timeline", "figure"),
-    Output("hint-panel", "children"),
-    Output("metrics-panel", "children"),
-    Input("tick", "n_intervals"),
-    State("last-label", "data"),
-)
-def refresh(_n, last_label):
-    pred = load_predictions()
-    topo, topo_eid = load_topomap()
-    update_live_metrics(pred)
-    last_pred = pred["pred_label"].iloc[-1] if not pred.empty else None
-    hint_label = None
-    if not topo.empty and "true_label" in topo.columns:
-        hint_label = topo["true_label"].iloc[0]
-    elif last_label:
-        hint_label = last_label
-    return (
-        topomap_figure(topo, last_pred, epoch_id=topo_eid),
-        prediction_bars(pred),
-        timeline_figure(pred),
-        hint_panel(hint_label),
-        metrics_panel(),
-    )
-
-
-if __name__ == "__main__":
-    app.run(debug=False, host="127.0.0.1", port=8052)
+if __name__ == '__main__':
+    print('Dashboard live disponible sur http://localhost:8050')
+    print(f'  Predictions : {PRED_DIR}')
+    print(f'  Topomap     : {TOPO_DIR}')
+    app.run(debug=False, host='0.0.0.0', port=8050)

@@ -54,6 +54,15 @@ split:
   strategy: "subject_based"      # Pas de data leakage entre sujets
   train_ratio: 0.78              # ~52/66 sujets
 
+# ---- Streaming EEG ----
+streaming:
+  input_dir: "data/stream_eeg/input/"
+  output_dir: "data/stream_eeg/"
+  checkpoint: "data/stream_eeg/checkpoint/"
+  parquet_dir: "data/parquet/"
+  model_cache: "data/stream_eeg/model_cache.pkl"
+  timeout_seconds: 3600
+
 # ---- MLflow ----
 mlflow:
   experiment_name: "neuro-spark-eeg-v2"
