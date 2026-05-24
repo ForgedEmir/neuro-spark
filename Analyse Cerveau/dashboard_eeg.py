@@ -11,10 +11,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import dash
-from dash import dcc, html, Input, Output, State
+from dash import dcc, html, Input, Output
 
 log = logging.getLogger(__name__)
 
@@ -170,27 +169,40 @@ def fig_live_accuracy(pred_df: pd.DataFrame) -> go.Figure:
 
 
 def fig_prediction_timeline(pred_df: pd.DataFrame) -> go.Figure:
-    """Timeline des prédictions : true vs pred."""
+    """Timeline des prédictions : true vs pred, avec erreurs visibles."""
     df = pred_df.copy()
     df["epoch_idx"] = range(len(df))
+    df["correct"] = df["correct"].astype(int)
 
     fig = go.Figure()
     for cls in CLS_NAMES:
         mask = df["true_label"] == cls
+        # true label (cercles)
         fig.add_trace(go.Scatter(
             x=df.loc[mask, "epoch_idx"],
             y=[cls] * mask.sum(),
             mode='markers', name=f'Vrai {cls}',
-            marker=dict(symbol='circle', size=10, color=CLS_COLORS[cls], opacity=0.5),
+            marker=dict(symbol='circle', size=10, color=CLS_COLORS[cls], opacity=0.4),
             showlegend=True,
         ))
-        # prédictions correctes
-        corr = mask & (df["true_label"] == df["pred_label"])
+        # correct predictions (petit cercle plein)
+        corr = mask & (df["pred_label"] == df["true_label"])
         fig.add_trace(go.Scatter(
             x=df.loc[corr, "epoch_idx"],
             y=[cls] * corr.sum(),
-            mode='markers', name=f'Prédit {cls}',
-            marker=dict(symbol='x', size=8, color=CLS_COLORS[cls], line=dict(width=1.5, color='black')),
+            mode='markers', name=f'✓ {cls}',
+            marker=dict(symbol='circle', size=6, color=CLS_COLORS[cls],
+                        line=dict(width=1.5, color='white')),
+            showlegend=False,
+        ))
+        # incorrect predictions (croix rouge)
+        wrong = mask & (df["pred_label"] != df["true_label"])
+        fig.add_trace(go.Scatter(
+            x=df.loc[wrong, "epoch_idx"],
+            y=[cls] * wrong.sum(),
+            mode='markers', name=f'✗ {cls}',
+            marker=dict(symbol='x', size=10, color=CORAIL,
+                        line=dict(width=2, color=CORAIL)),
             showlegend=False,
         ))
 
@@ -425,8 +437,7 @@ app.layout = html.Div([
 
     dcc.Interval(id='live-interval', interval=2000, n_intervals=0),
 
-    # Hidden div for last known state
-    html.Div(id='last-state', style={'display': 'none'}),
+    html.Div(id='last-state', style={'display': 'none'}),  # réservé
 
 ], style={'backgroundColor': BG, 'minHeight': '100vh'})
 
