@@ -533,7 +533,7 @@ body{background:#f7f3ec;font-family:Inter,system-ui,sans-serif;color:#3d3a33;lin
 
 
 if __name__ == '__main__':
-    print('Dashboard live disponible sur http://localhost:8050')
+    print('Dashboard live disponible sur http://localhost:8051')
     print(f'  Predictions : {PRED_DIR}')
     print(f'  Topomap     : {TOPO_DIR}')
-    app.run(debug=False, host='0.0.0.0', port=8050)
+    app.run(debug=False, host='0.0.0.0', port=8051)

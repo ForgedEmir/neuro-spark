@@ -60,12 +60,12 @@ eeg-stream-run: ## Lancer Spark Streaming EEG (BCI + topomap, timeout 15 min)
 eeg-producer: ## Stream un sujet EEG (defaut S001/R04 imagined hands)
 	.venv/bin/python scripts/stream_producer_eeg.py --subject S001 --run R04 --rate 0.5 --duration 300 --loop
 
-eeg-dashboard: ## Dashboard EEG live sur http://localhost:8052
-	@echo "Dashboard EEG BCI -> http://localhost:8052"
+eeg-dashboard: ## Dashboard EEG live sur http://localhost:8050
+	@echo "Dashboard EEG BCI -> http://localhost:8050"
 	.venv/bin/python dashboard_eeg.py
 
 # Dashboard et UIs
-dashboard: ## Lancer le dashboard Dash
+dashboard: ## Lancer le dashboard Dash sur http://localhost:8051
 	DASHBOARD_DIR=data/dashboard METRICS_DIR=data/metrics PREDICTIONS_DIR=data/predictions \
 	.venv/bin/python dashboard.py
 
