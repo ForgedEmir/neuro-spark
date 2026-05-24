@@ -123,6 +123,17 @@ Le pipeline manipule (à grands traits) :
 
 Tâches : repos (T0), imagerie de la main gauche (T1), imagerie de la main droite (T2). Accuracy actuelle ~44 % sur 3 classes (random = 33 %).
 
+## Community & Contributing
+
+| File | Purpose |
+|---|---|
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute, PR guidelines |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Community standards |
+| [`SECURITY.md`](SECURITY.md) | How to report a vulnerability |
+| [Bug report template](.github/ISSUE_TEMPLATE/bug_report.md) | For issues |
+| [Feature request template](.github/ISSUE_TEMPLATE/feature_request.md) | For suggestions |
+| [PR template](.github/PULL_REQUEST_TEMPLATE.md) | For pull requests |
+
 ## Licence
 
 MIT

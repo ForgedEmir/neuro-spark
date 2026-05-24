@@ -1,44 +1,32 @@
-# NeuroSpark — Contributing Guide
+# Contributing to NeuroSpark
 
-## Setup
+Thanks for your interest.
+
+## Quick Start
 
 ```bash
 git clone https://github.com/ForgedEmir/neuro-spark.git
-cd neuro-spark/Analyse\ Cerveau
-
-# Install dev dependencies
-pip install ruff pytest pyyaml
+cd neuro-spark
+# Docker recommended for Spark environment
+docker compose up --build
 ```
+
+## What's Helpful
+
+- **Streaming improvements** — the Spark Structured Streaming pipeline for EEG is a work in progress.
+- **New features** — additional frequency bands, model architectures, or visualization modes.
+- **Tests** — more edge cases for the Kedro pipelines.
+- **Docs** — architecture diagrams, troubleshooting guides.
+
+## PR Guidelines
+
+1. Branch from `develop`. Name: `feat/description` or `fix/description`.
+2. One change per PR.
+3. Run `make lint` before pushing.
+4. Update the DVC pipeline if data dependencies change.
 
 ## Code Style
 
-- **Ruff** pour le linting : `ruff check . --ignore E501`
-- **Type hints** sur toutes les fonctions publiques
-- **Docstrings** en français pour les fonctions métier
-
-## Tests
-
-```bash
-cd Analyse\ Cerveau
-python -m pytest tests/ -v
-```
-
-## Pipeline
-
-```bash
-cd Analyse\ Cerveau
-docker-compose up -d         # Start Spark cluster
-python src/neuro_spark/pipelines/ingestion.py    # EDF → Parquet
-python src/neuro_spark/pipelines/features.py     # FFT features
-python src/neuro_spark/pipelines/training.py     # CrossValidator
-python src/neuro_spark/pipelines/evaluation.py   # Metrics
-python src/neuro_spark/pipelines/export_dashboard.py  # Dashboard data
-python dashboard.py          # Launch UI → :8050
-```
-
-## PR Checklist
-
-- [ ] Ruff check passe
-- [ ] Tests passent
-- [ ] Type hints présents
-- [ ] Docstrings à jour
+- Python: ruff, line length 120 (E501 ignored).
+- Docstrings in French for business logic, English for technical code.
+- No hardcoded paths — use `conf/base/catalog.yml` and environment variables.
